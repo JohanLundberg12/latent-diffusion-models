@@ -12,7 +12,7 @@ from torchvision import datasets
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image
 
-from models.SparseAutoEncoder import SparseAutoEncoder
+from modules.SparseAutoEncoder import SparseAutoEncoder
 from utils.data_utils import get_device
 
 matplotlib.style.use("ggplot")
