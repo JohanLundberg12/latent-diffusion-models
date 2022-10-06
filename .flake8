@@ -1,0 +1,4 @@
+[flake8]
+# E501 - don't care about too long line
+# E203 - don't care about white space in something like: List[int : ]
+ignore = E501, E203
