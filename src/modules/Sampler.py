@@ -5,11 +5,11 @@ import torch
 
 from dataclasses import dataclass
 
-from models.DDPM import Diffusion
-from models.Unet import UNet
+from modules.DDPM import Diffusion
+from modules.Unet import UNet
 from utils.data_utils import update_config
 from utils.transforms import get_reverse_image_transform, reverse_transform
-from models.utils import instantiate_model
+from modules.utils import instantiate_model
 
 
 @dataclass

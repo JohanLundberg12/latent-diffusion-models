@@ -10,8 +10,8 @@ from tqdm import tqdm
 from wandb.sdk.wandb_run import Run
 from torch.utils.tensorboard import SummaryWriter
 
-from models.Unet import UNet
-from models.DDPM import Diffusion
+from modules.Unet import UNet
+from modules.DDPM import Diffusion
 
 
 class DiffusionModelTrainer:

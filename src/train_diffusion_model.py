@@ -7,9 +7,9 @@ import wandb
 
 from utils.data_utils import update_config_paths, get_dataset, set_dataloader
 
-from models.DDPM import Diffusion
-from models.utils import instantiate_model
-from models.trainers import DiffusionModelTrainer
+from modules.DDPM import Diffusion
+from modules.utils import instantiate_model
+from modules.trainers import DiffusionModelTrainer
 
 # note to self:
 # some arguments should be model invariant and some should be

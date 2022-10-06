@@ -130,10 +130,9 @@ dmypy.json
 
 # Folders
 data/
-models/
 valid_preds/
-.mlprojekt/
 results/
+models/
 logs/
 .vscode/
 __pycache__
