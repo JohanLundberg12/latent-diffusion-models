@@ -7,7 +7,7 @@ n_steps: 100 # T
 n_samples: 16 #number of generated examples after training
 
 data_path: 'data'
-experiments_path: 'logs'
+logs_path: 'logs'
 models_path: 'models'
 results_path: 'results'
 
