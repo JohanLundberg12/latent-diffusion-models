@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from modules.DDPM import Diffusion
 from modules.Unet import UNet
-from utils.data_utils import update_config
+from src.utils.utils import update_config
 from utils.transforms import get_reverse_image_transform, reverse_transform
 from modules.utils import instantiate_model
 
