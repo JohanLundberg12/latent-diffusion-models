@@ -1,4 +1,4 @@
-from typing import Callable, Type
+from typing import Callable
 from time import time
 import numpy as np
 
@@ -8,7 +8,9 @@ import torch.utils.data
 import torch.optim as optim
 
 from tqdm import tqdm
-from wandb.sdk.wandb_run import Run
+import wandb
+
+# from wandb.sdk.wandb_run import Run
 
 from .Unet import UNet
 from .DDPM import Diffusion
@@ -20,7 +22,7 @@ class DiffusionModelTrainer:
 
     def __init__(
         self,
-        run: Type[Run],
+        config: dict,
         diffusion_model: Diffusion,
         eps_model: UNet,
         train_loader: torch.utils.data.DataLoader,
@@ -29,10 +31,14 @@ class DiffusionModelTrainer:
         loss_fn: Callable,
         optimizer: optim.Optimizer,
         scaler: torch.cuda.amp.grad_scaler,
+        classes: list(),
+        device: str,
+        epochs: int,
     ) -> None:
-        self.run = run
-        self.device = self.run.config.device
-        self.epochs = self.run.config.epochs
+        self.config = config
+        self.device = device
+        self.epochs = epochs
+        self.classes = classes
 
         self.diffusion_model = diffusion_model.to(self.device)
         self.eps_model = eps_model.to(self.device)
@@ -41,7 +47,7 @@ class DiffusionModelTrainer:
         self.val_loader = val_loader
 
         self.cfg_scale = cfg_scale  # classifier free guidance
-        self.classes = torch.tensor(run.config.classes).to(self.device)
+        self.classes = torch.tensor(self.classes).to(self.device)
 
         self.loss_fn = loss_fn
         self.optimizer = optimizer
@@ -176,8 +182,8 @@ class DiffusionModelTrainer:
             results["valid_losses"].append(valid_loss)
 
             # Log results to wandb
-            self.run.log({"train_loss": train_loss, "epoch": epoch})
-            self.run.log({"val_loss": valid_loss, "epoch": epoch})
+            wandb.log({"train_loss": train_loss, "epoch": epoch})
+            wandb.log({"val_loss": valid_loss, "epoch": epoch})
 
             # Checkpoint saving - needs testing
             ckpt = {
@@ -185,9 +191,7 @@ class DiffusionModelTrainer:
                 "epoch": epoch,
                 "optim": self.optimizer.state_dict(),
             }
-            save_checkpoint(
-                ckpt, f"{self.run.config.checkpoints_path}/{self.run.config.name}"
-            )
+            save_checkpoint(ckpt, f"{self.config.checkpoints_path}/{self.config.name}")
 
 
 class AutoEncoderTrainer(nn.Module):

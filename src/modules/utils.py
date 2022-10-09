@@ -23,7 +23,7 @@ def get_model(config: dict, load=False):
     return model.to(config.device)
 
 
-def save_checkpoint(state, save_path: str, is_best: bool = False, max_keep: int = None):
+def save_checkpoint(state, save_path: str, is_best: bool = False, max_keep: int = 10):
     """Saves torch model to checkpoint file.
     Args:
         state (torch model state): State of a torch Neural Network

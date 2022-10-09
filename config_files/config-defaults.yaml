@@ -1,4 +1,5 @@
 name: "first_experiment"
+testing: True
 dataset: "MNIST"
 image_channels: 1
 

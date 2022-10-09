@@ -256,6 +256,7 @@ class UNet(nn.Module):
         num_classes: int = None,
     ) -> None:
         super().__init__()
+        self.image_channels = image_channels
         self.channels = [image_channels] + list(map(lambda x: x * n_channels, ch_mults))
 
         if with_time_emb:
