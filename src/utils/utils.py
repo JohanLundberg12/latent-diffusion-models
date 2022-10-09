@@ -137,10 +137,13 @@ def get_device():
     return device
 
 
-def set_seeds(seed: int = 42):
+def set_seeds(config, seed: int = 42):
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
+    config.seed = seed
+
+    return config
 
 
 def save_model(model: torch.nn.Module, target_dir: str, model_name: str):
