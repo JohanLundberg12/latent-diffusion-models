@@ -99,6 +99,7 @@ class Diffusion(nn.Module):
         xt = torch.randn(shape, device=device)
         time_steps = tqdm(
             reversed(range(0, self.n_steps)),
+            total=self.n_steps,
             desc="sampling loop time step",
             position=0,
         )

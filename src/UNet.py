@@ -67,7 +67,7 @@ class ResNetBlock(nn.Module):
 
     def __init__(self, dim, dim_out, *, time_emb_dim=None, groups=8):
         super().__init__()
-        self.mlp = (
+        self.mlp_t = (
             nn.Sequential(
                 nn.SiLU(), nn.Linear(in_features=time_emb_dim, out_features=dim_out)
             )
@@ -85,8 +85,8 @@ class ResNetBlock(nn.Module):
     def forward(self, x: torch.Tensor, time_emb: torch.Tensor = None):
         h = self.block1(x)
 
-        if exists(self.mlp) and exists(time_emb):
-            time_emb = self.mlp(time_emb)
+        if exists(self.mlp_t) and exists(time_emb):
+            time_emb = self.mlp_t(time_emb)
             h = rearrange(time_emb, "b c -> b c 1 1") + h  # extend last two dimesions
 
         h = self.block2(h)
@@ -178,7 +178,7 @@ class Encoder(nn.Module):
                 )
             )
 
-    def forward(self, x: torch.Tensor, t: torch.Tensor) -> List:
+    def forward(self, x: torch.Tensor, t: torch.Tensor = None) -> List:
         skip_connections = list()
 
         for block1, attn, downsample in self.downs:
@@ -201,7 +201,11 @@ class Decoder(nn.Module):
             self.ups.append(
                 nn.ModuleList(
                     [
-                        ResNetBlock(dims[i], dims[i + 1], time_emb_dim=time_emb_dim),
+                        ResNetBlock(
+                            dims[i],
+                            dims[i + 1],
+                            time_emb_dim=time_emb_dim,
+                        ),
                         Residual(PreNorm(dims[i + 1], LinearAttention(dims[i + 1]))),
                         nn.ConvTranspose2d(
                             dims[i], dims[i + 1], kernel_size=2, stride=2
@@ -279,7 +283,8 @@ class UNet(nn.Module):
         )
 
         self.decoder = Decoder(
-            dims=list(reversed(self.channels)), time_emb_dim=self.time_dim
+            dims=list(reversed(self.channels)),
+            time_emb_dim=self.time_dim,
         )
 
         self.final_conv = nn.Sequential(
@@ -287,8 +292,27 @@ class UNet(nn.Module):
             nn.Conv2d(in_channels=n_channels, out_channels=out_channels, kernel_size=1),
         )
 
+    def encode(self, x: torch.Tensor, t: torch.Tensor = None):
+        x, enc_frts = self.encoder(x, t)
+
+        return x, enc_frts
+
+    def bottleneck_layer(self, x: torch.Tensor, t: torch.Tensor):
+        x = self.bottleneck(x, t)
+        x = self.bottleneck_attn(x)
+
+        return x
+
+    def decode(self, x: torch.Tensor, enc_ftrs: list(), t: torch.Tensor):
+        x = self.decoder(x, enc_ftrs, t)
+
+        return x
+
     def forward(
-        self, x: torch.Tensor, t: torch.Tensor, y: torch.Tensor
+        self,
+        x_noisy: torch.Tensor,
+        t: torch.Tensor,
+        y: torch.Tensor,
     ) -> torch.Tensor:
         t = self.time_emb(t) if exists(self.time_emb) else None
 
@@ -296,14 +320,13 @@ class UNet(nn.Module):
             t += self.label_emb(y)
 
         # downsample
-        x, enc_ftrs = self.encoder(x, t)
+        x, enc_ftrs = self.encode(x_noisy, t)
 
         # bottleneck
-        x = self.bottleneck(x, t)
-        x = self.bottleneck_attn(x)
+        h = self.bottleneck_layer(x, t)
 
         # upsample
-        x = self.decoder(x, enc_ftrs, t)
+        x = self.decode(h, enc_ftrs, t)
 
         # final layer
         out = self.final_conv(x)

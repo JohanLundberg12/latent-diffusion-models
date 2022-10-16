@@ -3,8 +3,8 @@ import torch
 import wandb
 
 from .DDPM import Diffusion
-from .Unet import UNet
-from ..utils.transforms import get_reverse_image_transform, reverse_transform
+from .UNet import UNet
+from .transforms import get_reverse_image_transform, reverse_transform
 
 
 class Sampler:
