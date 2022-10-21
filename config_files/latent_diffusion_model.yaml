@@ -1,0 +1,23 @@
+# Train or sample from a latent ddpm
+name: latent_diffusion_model
+type: ldm
+testing: True
+diffusion:
+  type: latent
+  n_steps: 100 # T (100-400)
+  n_samples: 16 #number of generated if sampling is run
+batch_size: 8
+epochs: 5
+learning_rate: 0.005
+loss_fn: mse
+model: 
+  type: UNet
+  params:
+    channel_multipliers: [1, 2, 4, 8] #64, 128, 256, 512, etc.
+    image_size: 64 #for image rescaling
+    n_channels: 64 #first feature map output channels
+    out_channels: 1 #noise prediction
+    with_time_emb: True
+data:
+  dataset: "MNIST"
+  image_channels: 1

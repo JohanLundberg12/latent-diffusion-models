@@ -1,0 +1,16 @@
+# Train a diffusion_based_autoencoder
+name: autoencoder_first_run
+type: autoencoder
+testing: False
+batch_size: 16
+epochs: 10
+learning_rate: 0.00001
+loss_fn: mse
+model: 
+  type: Autoencoder
+  params:
+    image_size: 16
+data:
+  dataset: MNIST
+  image_channels: 1
+
