@@ -24,17 +24,19 @@ class GaussianDistribution:
 
     def __init__(self, parameters: torch.Tensor):
         # Split mean and log of variance
-        self.mean, log_var = torch.chunk(parameters, 2, dim=1)
-
-        # Clamp the log of variances
-        self.log_var = torch.clamp(log_var, -30.0, 20.0)
+        self.mean, self.log_var = torch.chunk(parameters, 2, dim=1)
 
         # Calculate standard deviation
-        self.std = torch.exp(0.5 * self.log_var)
+        self.std = torch.exp(self.log_var / 2)
 
-    # Sample from the distribution
+        # random input from a N(0,1)
+        self.epsilon = torch.randn_like(self.std)
+
+    # Sample z from the distribution
     def sample(self):
-        return self.mean + self.std * torch.randn_like(self.std)
+        z = self.mean + (self.std * self.epsilon)
+
+        return z
 
 
 class ResnetBlock(nn.Module):
@@ -190,7 +192,7 @@ class Encoder(nn.Module):
         channel_multipliers: List[int] = [1, 2, 4, 8],
         n_resnet_blocks: int = 2,
         in_channels: int = 1,
-        z_channels: int = 4,
+        z_channels: int = 512,
     ):
         super().__init__()
 
@@ -380,7 +382,7 @@ class Autoencoder(nn.Module):
     def __init__(
         self,
         in_channels: int = 1,
-        z_channels: int = 4,
+        z_channels: int = 512,
         out_channels: int = 1,
         channels: int = 64,
         channel_multipliers: List[int] = [1, 2, 4, 8],
@@ -396,7 +398,7 @@ class Autoencoder(nn.Module):
         )
 
         # Conv to map from embedding space to quantized emb. space moments (mean & var)
-        self.quant_conv = nn.Conv2d(2 * z_channels, 2 * z_channels, 1)
+        self.quant_conv = nn.Conv2d(z_channels * 2, z_channels * 2, 1)
 
         self.decoder = Decoder(
             channels=channels,
@@ -431,12 +433,12 @@ class Autoencoder(nn.Module):
     def forward(self, img: torch.Tensor):
         # get a distribution
         z = self.encoder(img)
-        moments = self.quant_conv(z)
+        moments = self.quant_conv(z)  # 1024
 
-        distribution = GaussianDistribution(moments)
+        self.distribution = GaussianDistribution(moments)  # 512 as moments is chunked
 
         # sample from it
-        z = distribution.sample()
+        z = self.distribution.sample()
 
         z = self.post_quant_conv(z)
 

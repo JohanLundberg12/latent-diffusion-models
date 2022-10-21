@@ -7,12 +7,12 @@ from .transforms import get_image_transform
 
 
 class CelebADataset(torchvision.datasets.CelebA):
-    def __init__(self, config, image_size, train) -> None:
+    def __init__(self, config: dict, image_size: int, split: str) -> None:
         transform = get_image_transform(image_size=image_size)
 
         super().__init__(
             str(config.data_paths["data"]),
-            train=train,
+            split=split,
             download=True,
             transform=transform,
         )
@@ -40,11 +40,15 @@ class MNISTDataset(torchvision.datasets.MNIST):
         return super().__getitem__(item)
 
 
-def _get_dataset(config: dict, name: str, image_size: int, train):
+def _get_dataset(config: dict, name: str, image_size: int, train: bool):
     if name == "MNIST":
         dataset = MNISTDataset(config, image_size, train=train)
     elif name == "CelebA":
-        dataset = CelebADataset(config, image_size, train=train)
+        if train:
+            dataset = CelebADataset(config, image_size, split="train")
+        else:
+            dataset = CelebADataset(config, image_size, split="valid")
+
     else:
         raise NameError
 

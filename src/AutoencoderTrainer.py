@@ -45,6 +45,7 @@ class AutoencoderTrainer:
             verbose=True,
             path=self.config.data_paths["checkpoints"] + "/checkpoint.pt",
         )
+        self.reconstruction_loss_factor = 1
 
     def train_step(self, epoch):
         self.model.train()
@@ -64,7 +65,12 @@ class AutoencoderTrainer:
             with torch.cuda.amp.autocast():
                 outputs = self.model(data)
 
-                loss = self.loss_fn(outputs, data)
+                loss = self.loss_fn(
+                    outputs,
+                    data,
+                    self.model.distribution.mean,
+                    self.model.distribution.log_var,
+                )
 
             # Scale gradients
             self.scaler.scale(loss).backward()
@@ -107,7 +113,12 @@ class AutoencoderTrainer:
                 outputs = self.model(data)
 
                 # Calc. and acc. loss
-                loss = self.loss_fn(outputs, data)
+                loss = self.loss_fn(
+                    outputs,
+                    data,
+                    self.model.distribution.mean,
+                    self.model.distribution.log_var,
+                )
                 valid_loss += loss.item() * data.size(
                     0
                 )  # * data.size(0) to get total loss for the batch and not the avg.

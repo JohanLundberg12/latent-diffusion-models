@@ -5,6 +5,7 @@ from pathlib import Path
 from tqdm import tqdm
 
 import torch
+from torch import nn
 import torch.nn.functional as f
 
 from .UNet import UNet
@@ -101,6 +102,8 @@ def instantiate_unet(config: dict = None):
 def _get_loss_fn(loss_fn):
     if loss_fn == "mse":
         return f.mse_loss
+    elif loss_fn == "KL":
+        return nn.KLDivLoss(reduction="batchmean")
 
 
 def make_settings(config):
