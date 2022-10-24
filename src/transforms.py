@@ -12,7 +12,7 @@ def get_image_transform(image_size):
     transform = transforms.Compose(
         [
             transforms.Resize((image_size, image_size)),
-            transforms.ToTensor(),  # Shape: HWC, Scales data into [0,1] by div / 255
+            transforms.ToTensor(),  # Shape: HWC, Scales data into [0,1] by div / 255, so does normalization
             transforms.Lambda(lambda t: (t * 2) - 1),  # Scale between [-1, 1]
         ]
     )
