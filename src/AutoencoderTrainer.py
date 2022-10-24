@@ -60,18 +60,28 @@ class AutoencoderTrainer:
             data, targets = data.to(self.device), targets.to(self.device)
             prepare_time = start_time - time()
 
-            self.optimizer.zero_grad()
-
+            # Autocasting automatically chooses the precision (floating point data type)
+            # for GPU operations to improve performance while maintaining accuracy.
             with torch.cuda.amp.autocast():
                 outputs, mu, sigma = self.model(data)
 
                 loss = self.loss_fn(outputs, data, mu, sigma)
 
-            # Scale gradients
+            self.optimizer.zero_grad()
+
+            # The network loss is scaled by a scaling factor to prevent underflow.
+            # Gradients flowing back through the network are scaled by the same factor.
+            # Calls .backward() on scaled loss to create scaled gradients.
             self.scaler.scale(loss).backward()
 
-            # Update optimizer
+            # Scaler.step() first unscales the gradients of the optimizer's
+            # assigned params by dividing them by the scale factor.
+            # If the gradients do not contain NaNs/inf, optimizer.step() is called,
+            # otherwise skipped.
+            # optimizer.step() is then called using the unscaled gradients.
             self.scaler.step(self.optimizer)
+
+            # Updates the scale factor
             self.scaler.update()
 
             # Add total batch loss to total loss
