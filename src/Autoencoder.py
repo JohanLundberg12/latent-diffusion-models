@@ -34,6 +34,7 @@ class GaussianDistribution:
 
     # Sample z from the distribution
     def sample(self):
+        # reparamerization trick
         z = self.mean + (self.std * self.epsilon)
 
         return z
@@ -432,10 +433,11 @@ class Autoencoder(nn.Module):
 
     def forward(self, img: torch.Tensor):
         # get a distribution
-        z = self.encoder(img)
+        z = self.encoder(img)  # 512
         moments = self.quant_conv(z)  # 1024
 
-        self.distribution = GaussianDistribution(moments)  # 512 as moments is chunked
+        # mean, std, 512 as moments is chunked
+        self.distribution = GaussianDistribution(moments)
 
         # sample from it
         z = self.distribution.sample()
@@ -444,4 +446,5 @@ class Autoencoder(nn.Module):
 
         img = self.decoder(z)
 
-        return img
+        # return mu and log_var as they are used in the KL divergence
+        return img, self.distribution.mean, self.distribution.log_var

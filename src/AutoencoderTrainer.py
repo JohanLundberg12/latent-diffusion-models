@@ -63,14 +63,9 @@ class AutoencoderTrainer:
             self.optimizer.zero_grad()
 
             with torch.cuda.amp.autocast():
-                outputs = self.model(data)
+                outputs, mu, sigma = self.model(data)
 
-                loss = self.loss_fn(
-                    outputs,
-                    data,
-                    self.model.distribution.mean,
-                    self.model.distribution.log_var,
-                )
+                loss = self.loss_fn(outputs, data, mu, sigma)
 
             # Scale gradients
             self.scaler.scale(loss).backward()
