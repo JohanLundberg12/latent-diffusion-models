@@ -124,6 +124,10 @@ def make_settings(config):
 
     # Set scaler, optimizer and loss fn (criterion)
     loss_fn = _get_loss_fn(config.loss_fn)
+
+    # instances of GradScaler() help perform steps of the gradient scaling
+    # conveniently. Improves convergence for networks with
+    # float16 (Conv layers) gradients by minimizing gradient underflow
     scaler = torch.cuda.amp.GradScaler()
 
     return (train_loader, val_loader, classes, loss_fn, scaler)
