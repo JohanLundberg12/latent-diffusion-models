@@ -1,4 +1,5 @@
 from pathlib import Path
+import random
 import numpy as np
 import shutil
 from torchvision.utils import save_image
@@ -18,9 +19,10 @@ def _get_device():
 
 
 def _set_seed(seed: int = 42):
+    random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
     return seed
 
