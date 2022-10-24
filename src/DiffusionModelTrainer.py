@@ -81,10 +81,6 @@ class DiffusionModelTrainer:
             data, targets = data.to(self.device), targets.to(self.device)
             prepare_time = start_time - time()
 
-            # Make the gradients zero to avoid the gradient being a
-            # combination of the old gradient and the next
-            self.optimizer.zero_grad()
-
             with torch.cuda.amp.autocast():
                 if self.autoencoder is not None:
                     z_sem, _ = self.autoencoder.encode(data)
@@ -102,6 +98,10 @@ class DiffusionModelTrainer:
 
                 # calculate loss
                 loss = self.loss_fn(noise, eps_theta)
+
+            # Make the gradients zero to avoid the gradient being a
+            # combination of the old gradient and the next
+            self.optimizer.zero_grad()
 
             # Scale gradients
             self.scaler.scale(loss).backward()
