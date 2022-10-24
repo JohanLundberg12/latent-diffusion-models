@@ -24,18 +24,20 @@ class GaussianDistribution:
 
     def __init__(self, parameters: torch.Tensor):
         # Split mean and log of variance
-        self.mean, self.log_var = torch.chunk(parameters, 2, dim=1)
+        # mu is the mean point of the distribution
+        # log_var is the logarithm of the variance of each dimension
+        self.mu, self.log_var = torch.chunk(parameters, 2, dim=1)
 
         # Calculate standard deviation
-        self.std = torch.exp(self.log_var / 2)
+        self.sigma = torch.exp(self.log_var / 2)
 
-        # random input from a N(0,1)
-        self.epsilon = torch.randn_like(self.std)
+        # random input from a N(0,1) distribution
+        self.epsilon = torch.randn_like(self.sigma)
 
     # Sample z from the distribution
     def sample(self):
         # reparamerization trick
-        z = self.mean + (self.std * self.epsilon)
+        z = self.mu + (self.sigma * self.epsilon)
 
         return z
 
@@ -447,4 +449,4 @@ class Autoencoder(nn.Module):
         img = self.decoder(z)
 
         # return mu and log_var as they are used in the KL divergence
-        return img, self.distribution.mean, self.distribution.log_var
+        return img, self.distribution.mu, self.distribution.log_var
