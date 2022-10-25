@@ -213,6 +213,10 @@ class Encoder(nn.Module):
         )
 
         # Number of channels in each top level block
+        # First block (out of 4) of encoder have two resnet blocks where the
+        # channel dim is not changed since we have [1] + channel_multipliers
+        # and channel_multiplers starts with [1], meaning the in and out channels
+        # of the ResNet will be 1 * channels and 1 * channels, i.e. 64,64
         channels_list = [m * channels for m in [1] + channel_multipliers]
 
         # List of top-level blocks
@@ -251,7 +255,7 @@ class Encoder(nn.Module):
 
     def forward(self, img: torch.Tensor):
 
-        # Map to channels with the initial convolution
+        # Map to channels with the initial convolution (img_channels, channels)
         x = self.conv_in(img)
 
         # Top-level blocks
@@ -377,9 +381,12 @@ class Decoder(nn.Module):
 
 class Autoencoder(nn.Module):
     """
-    z_channels(latent_channels): number of channels in the embedding space
-    emb_channels: number of dimensions in the quantized embedding space
+    in_channels (int): channels in input image.
+    z_channels (latent_channels) (int) : number of channels in the latent embedding space.
+    out_channels (int): output channels
     channels: number of channels in first conv in encoder and last conv in decoder.
+    channel_multipliers (list): channel dimension multiplier at the different levels.
+    n_resnet_blocks (int): number of resnet blocks used in encoder and decoder.
     """
 
     def __init__(
