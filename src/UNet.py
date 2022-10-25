@@ -97,7 +97,7 @@ class PreNorm(nn.Module):
     def __init__(self, dim, fn):
         super().__init__()
         self.fn = fn
-        self.norm = nn.GroupNorm(1, dim)
+        self.norm = nn.GroupNorm(1, dim)  # (1, dim) equivalent to layer norm
 
     def forward(self, x):
         x = self.norm(x)
