@@ -15,6 +15,14 @@ from src.utils import (
 from src.Autoencoder import Autoencoder
 from src.AutoencoderTrainer import AutoencoderTrainer
 
+# cudnn autotuner is going run a short benchmark and will select the algorithm
+# with the best performance on a given hardware for a given input size.
+# Adds small overhead during the first training iteration,
+# but can lead to a significant speed up for conv layers.
+# https://www.youtube.com/watch?v=9mS1fIYj1So
+# https://pytorch.org/tutorials/recipes/recipes/tuning_guide.html
+torch.backends.cudnn.benchmark = True
+
 
 # reconstruction_term: how to tune?
 def kl_loss_fn(data, outputs, mu, log_var, reconstruction_term=1):
@@ -42,7 +50,10 @@ def main(configurations):
 
         (train_loader, val_loader, classes, loss_fn, scaler) = make_settings(config)
 
-        autoencoder = Autoencoder()
+        autoencoder = Autoencoder(
+            in_channels=config.data["image_channels"],
+            out_channels=config.data["image_channels"],
+        )
         optimizer = torch.optim.Adam(autoencoder.parameters(), lr=config.learning_rate)
 
         wandb.watch(autoencoder, loss_fn, log="all", log_freq=10)

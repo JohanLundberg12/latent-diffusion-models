@@ -18,6 +18,12 @@ from src.Autoencoder import Autoencoder
 from src.DDPM import Diffusion
 from src.DiffusionModelTrainer import DiffusionModelTrainer
 
+# cudnn autotuner is going run a short benchmark and will select the algorithm
+# with the best performance on a given hardware for a given input size.
+# Adds small overhead during the first training iteration,
+# but can lead to a significant speed up for conv layers.
+torch.backends.cudnn.benchmark = True
+
 # note to self:
 # some arguments should be model invariant and some should be
 # noise type dependent
