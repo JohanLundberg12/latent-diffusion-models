@@ -101,7 +101,9 @@ class DiffusionModelTrainer:
 
             # Make the gradients zero to avoid the gradient being a
             # combination of the old gradient and the next
-            self.optimizer.zero_grad()
+            # Updates gradients by write rather than read and write (+=) used
+            # https://www.youtube.com/watch?v=9mS1fIYj1So
+            self.optimizer.zero_grad(set_to_none=True)
 
             # Scale gradients
             self.scaler.scale(loss).backward()
