@@ -56,8 +56,11 @@ def _get_dataset(config: dict, name: str, image_size: int, train: bool):
 
 
 def _set_dataloader(dataset, batch_size):
+    # Use num_workers > 0 to enable asynchronous data processing.
+    # pin_memory=True to make CPU to GPU copies asynchronous.
+    # num_workers is usually to be tuned, depending on your hardware.
     return torch.utils.data.DataLoader(
-        dataset, batch_size, shuffle=True, pin_memory=True
+        dataset, batch_size, shuffle=True, num_workers=4, pin_memory=True
     )
 
 
