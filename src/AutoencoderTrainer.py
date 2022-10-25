@@ -56,8 +56,9 @@ class AutoencoderTrainer:
 
         pbar = progress_bar(self.train_loader, desc="train step")
 
-        for _, (data, targets) in pbar:
-            data, targets = data.to(self.device), targets.to(self.device)
+        for _, (data, _) in pbar:
+            # prepare data
+            data = data.to(self.device)
             prepare_time = start_time - time()
 
             # Autocasting automatically chooses the precision (floating point data type)
@@ -67,7 +68,9 @@ class AutoencoderTrainer:
 
                 loss = self.loss_fn(outputs, data, mu, sigma)
 
-            self.optimizer.zero_grad()
+            # Updates gradients by write rather than read and write (+=) used
+            # https://www.youtube.com/watch?v=9mS1fIYj1So
+            self.optimizer.zero_grad(set_to_none=True)
 
             # The network loss is scaled by a scaling factor to prevent underflow.
             # Gradients flowing back through the network are scaled by the same factor.
@@ -85,14 +88,15 @@ class AutoencoderTrainer:
             self.scaler.update()
 
             # Add total batch loss to total loss
-            batch_loss = loss.item() * data.size(0)
+            batch_loss = loss.item() * data.size(0)  # not sure about data.size(0)
             train_loss += batch_loss
 
             # Update info in progress bar
             process_time = start_time - time() - prepare_time
             compute_efficency = process_time / (process_time + prepare_time)
             pbar.set_description(
-                f"Compute efficiency: {compute_efficency:.2f}, "
+                "Train step, "
+                f"compute efficiency: {compute_efficency:.2f}, "
                 f"batch loss: {batch_loss:.4f}, "
                 f"train loss: {train_loss:.4f}"
             )
@@ -103,33 +107,44 @@ class AutoencoderTrainer:
 
         return train_loss
 
+    # .inference_mode() should be faster than .no_grad()
+    # but you can't use .requires_grad() in that context
+    @torch.inference_mode()
     def eval_step(self, epoch):
         self.model.eval()
 
         valid_loss: float = 0.0
 
+        start_time = time()
+
         pbar = progress_bar(self.val_loader, desc="val step")
 
-        # .inference_mode() should be faster than .no_grad()
-        # but you can't use .requires_grad() in that context
-        with torch.inference_mode():
-            for _, (data, targets) in pbar:
-                data, targets = data.to(self.device), targets.to(self.device)
-                outputs = self.model(data)
+        for _, (data, _) in pbar:
+            data = data.to(self.device)
+            prepare_time = start_time - time()
 
-                # Calc. and acc. loss
-                loss = self.loss_fn(
-                    outputs,
-                    data,
-                    self.model.distribution.mean,
-                    self.model.distribution.log_var,
-                )
-                valid_loss += loss.item() * data.size(
-                    0
-                )  # * data.size(0) to get total loss for the batch and not the avg.
+            outputs, mu, sigma = self.model(data)
 
-            # Calculate average loss
-            valid_loss /= len(self.val_loader)
+            # Calc. and acc. loss
+            loss = self.loss_fn(outputs, data, mu, sigma)
+
+            # * data.size(0) to get total loss for the batch and not the avg.
+            batch_loss = loss.item() * data.size(0)
+            valid_loss += batch_loss
+
+            # Update info in progress bar
+            process_time = start_time - time() - prepare_time
+            compute_efficency = process_time / (process_time + prepare_time)
+            pbar.set_description(
+                "Val step, "
+                f"compute efficiency: {compute_efficency:.2f}, "
+                f"batch loss: {batch_loss:.4f}, "
+                f"valid loss: {valid_loss:.4f}"
+            )
+            start_time = time()
+
+        # Calculate average loss
+        valid_loss /= len(self.val_loader)
 
         if epoch % 5 == 0:
             # save the reconstructed images
