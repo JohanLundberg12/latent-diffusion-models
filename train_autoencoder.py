@@ -4,7 +4,6 @@ import yaml
 import wandb
 
 import torch
-import torch.nn.functional as f
 
 from src import prepare_experiment
 from src.utils import (
@@ -22,23 +21,6 @@ from src.AutoencoderTrainer import AutoencoderTrainer
 # https://www.youtube.com/watch?v=9mS1fIYj1So
 # https://pytorch.org/tutorials/recipes/recipes/tuning_guide.html
 torch.backends.cudnn.benchmark = True
-
-
-# reconstruction_term: how to tune?
-def kl_loss_fn(data, outputs, mu, log_var, reconstruction_term=1):
-    # reconstruction loss: element-wise mean squared error
-    r_loss = f.mse_loss(
-        input=outputs, target=data, reduction="mean"
-    )  # sum or mean reduction?
-
-    # Kullback Leibler Divergence loss
-    # Ensures mu and sigma values never stray too far from a standard normal
-    kl_loss = -0.5 * torch.sum(1 + log_var - mu**2 - torch.exp(log_var))
-
-    # Evidence Lower Bound loss
-    elbo_loss = reconstruction_term * r_loss + kl_loss
-
-    return elbo_loss
 
 
 def main(configurations):
@@ -65,7 +47,7 @@ def main(configurations):
             model=autoencoder,
             train_loader=train_loader,
             val_loader=val_loader,
-            loss_fn=kl_loss_fn,
+            loss_fn=loss_fn,
             optimizer=optimizer,
             scaler=scaler,
             classes=classes,
