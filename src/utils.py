@@ -5,7 +5,6 @@ from pathlib import Path
 from tqdm import tqdm
 
 import torch
-from torch import nn
 import torch.nn.functional as f
 
 from .UNet import UNet
@@ -99,11 +98,32 @@ def instantiate_unet(config: dict = None):
     return model
 
 
+# reconstruction_term: how to tune?
+def elbo_loss_fn(data, outputs, mu, log_var, reconstruction_term=1):
+    # reconstruction loss: element-wise mean squared error
+    r_loss = f.mse_loss(
+        input=outputs, target=data, reduction="mean"
+    )  # sum or mean reduction (not important right now)?
+
+    # Kullback Leibler Divergence loss
+    # Ensures mu and sigma values never stray too far from a standard normal
+    kl_loss = -0.5 * torch.sum(1 + log_var - mu**2 - torch.exp(log_var))
+
+    # Evidence Lower Bound loss
+    elbo_loss = reconstruction_term * r_loss + kl_loss
+
+    return elbo_loss
+
+
 def _get_loss_fn(loss_fn):
     if loss_fn == "mse":
         return f.mse_loss
-    elif loss_fn == "KL":
-        return nn.KLDivLoss(reduction="batchmean")
+    elif loss_fn == "elbo":
+        return elbo_loss_fn
+    elif loss_fn == "cross-entropy":
+        return f.cross_entropy
+    else:
+        raise NameError
 
 
 def make_settings(config):
@@ -111,7 +131,7 @@ def make_settings(config):
     config (dict): yaml configurations
 
     Returns:
-        dict: Containing dataloaders, classes, criterion,
+        dict: Containing dataloaders, classes, loss_fn,
         scaler
     """
     # Load data
@@ -122,7 +142,7 @@ def make_settings(config):
     config.classes = classes
     config.num_classes = num_classes
 
-    # Set scaler, optimizer and loss fn (criterion)
+    # get loss fn (criterion)
     loss_fn = _get_loss_fn(config.loss_fn)
 
     # instances of GradScaler() help perform steps of the gradient scaling
