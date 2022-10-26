@@ -125,7 +125,7 @@ class AutoencoderTrainer:
 
             outputs, mu, sigma = self.model(data)
 
-            # Calc. and acc. loss
+            # Calc. loss
             loss = self.loss_fn(outputs, data, mu, sigma)
 
             # * data.size(0) to get total loss for the batch and not the avg.
