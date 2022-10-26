@@ -1,11 +1,11 @@
 # Train a diffusion_based_autoencoder
 name: autoencoder_first_run
 type: autoencoder
-testing: False
+testing: True
 batch_size: 16
 epochs: 10
 learning_rate: 0.00001
-loss_fn: mse
+loss_fn: elbo
 model: 
   type: Autoencoder
   params:
