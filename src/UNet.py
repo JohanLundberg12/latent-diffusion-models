@@ -4,18 +4,11 @@ from typing import List, Tuple, Union
 import math
 import torch
 from einops import rearrange
-from inspect import isfunction
 from torch import nn, einsum
 
 
 def exists(x):
     return x is not None
-
-
-def default(val, d):
-    if exists(val):
-        return val
-    return d() if isfunction(d) else d
 
 
 class Residual(nn.Module):
@@ -28,13 +21,20 @@ class Residual(nn.Module):
 
 
 class SinusoidalPosEmb(nn.Module):
-    def __init__(self, dim):
+    def __init__(self, dim: int):
+        """Creates sinusoidal time step positional embeddings
+        Args:
+            dim (int): the channel dimension
+        """
         super().__init__()
         self.dim = dim
 
     def forward(self, x):
         device = x.device
+
+        # half the channel is sin and the other is cos
         half_dim = self.dim // 2
+
         emb = math.log(10000) / (half_dim - 1)
         emb = torch.exp(torch.arange(half_dim, device=device) * -emb)
 
@@ -49,15 +49,13 @@ class Block(nn.Module):
 
     def __init__(self, dim, dim_out, groups=8):
         super().__init__()
-        self.conv2d = nn.Conv2d(dim, dim_out, kernel_size=3, padding=1)
-        self.norm = nn.GroupNorm(num_groups=groups, num_channels=dim_out)
+        self.norm = nn.GroupNorm(num_groups=groups, num_channels=dim)
         self.activation = nn.SiLU()
+        self.conv2d = nn.Conv2d(dim, dim_out, kernel_size=3, padding=1)
 
+    # it is conv(act(norm(x))) because of the in_conv in UNet
     def forward(self, x):
-        x = self.conv2d(x)
-        x = self.norm(x)
-        x = self.activation(x)
-        return x
+        return self.conv2d(self.activation(self.norm(x)))
 
 
 class ResNetBlock(nn.Module):
@@ -67,6 +65,8 @@ class ResNetBlock(nn.Module):
 
     def __init__(self, dim, dim_out, *, time_emb_dim=None, groups=8):
         super().__init__()
+
+        # time step embedding
         self.mlp_t = (
             nn.Sequential(
                 nn.SiLU(), nn.Linear(in_features=time_emb_dim, out_features=dim_out)
@@ -78,7 +78,7 @@ class ResNetBlock(nn.Module):
         self.block2 = Block(dim_out, dim_out, groups=groups)
 
         # nn.Identity is a placeholder that is argument insensitive
-        self.res_conn_conv = (
+        self.shortcut = (
             nn.Conv2d(dim, dim_out, kernel_size=1) if dim != dim_out else nn.Identity()
         )
 
@@ -86,11 +86,17 @@ class ResNetBlock(nn.Module):
         h = self.block1(x)
 
         if exists(self.mlp_t) and exists(time_emb):
+            # create time step embeddings
             time_emb = self.mlp_t(time_emb)
-            h = rearrange(time_emb, "b c -> b c 1 1") + h  # extend last two dimesions
 
+            # add time step embeddings but first extend last two dimensions
+            h = rearrange(time_emb, "b c -> b c 1 1") + h
+
+        # final conv layer with norm and activation
         h = self.block2(h)
-        return h + self.res_conn_conv(x)
+
+        # add residual connection
+        return h + self.shortcut(x)
 
 
 class PreNorm(nn.Module):
@@ -164,11 +170,22 @@ class Encoder(nn.Module):
     Finally a maxpool2d."""
 
     def __init__(self, dims: List[int], time_emb_dim: int = None) -> None:
+        """
+        Args:
+            channels (int): number of in channels in the ResNet feature map.
+                For instance: 1 or 3.
+            dims (List[int]): the number of channels at the next levels of the UNet.
+                For instance: [64, 128, 256, 512]
+            time_emb_dim (int, optional): time step embedding. Defaults to None.
+        """
         super().__init__()
+
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.downs = nn.ModuleList([])
-        for i in range(len(dims) - 2):
-            self.downs.append(
+
+        levels = len(dims)
+
+        self.downs = nn.ModuleList(
+            [
                 nn.ModuleList(
                     [
                         ResNetBlock(dims[i], dims[i + 1], time_emb_dim=time_emb_dim),
@@ -176,7 +193,9 @@ class Encoder(nn.Module):
                         self.pool,
                     ]
                 )
-            )
+                for i in range(levels - 1)
+            ]
+        )
 
     def forward(self, x: torch.Tensor, t: torch.Tensor = None) -> List:
         skip_connections = list()
@@ -196,13 +215,15 @@ class Decoder(nn.Module):
     def __init__(self, dims: List, time_emb_dim=None) -> None:
         super().__init__()
 
-        self.ups = nn.ModuleList([])
-        for i in range(len(dims) - 2):
-            self.ups.append(
+        levels = len(dims)
+
+        self.ups = nn.ModuleList(
+            [
                 nn.ModuleList(
                     [
+                        # dims[i] + dims[i + 1] because we add the skip connection
                         ResNetBlock(
-                            dims[i],
+                            dims[i] + dims[i + 1],
                             dims[i + 1],
                             time_emb_dim=time_emb_dim,
                         ),
@@ -212,7 +233,9 @@ class Decoder(nn.Module):
                         ),
                     ]
                 )
-            )
+                for i in range(levels - 1)
+            ]
+        )
 
     def forward(
         self, x: torch.Tensor, skip_connections: List, t: torch.Tensor
@@ -229,7 +252,8 @@ class TimeEmbedding(nn.Module):
     """
     Embedding for time step $t$
     Combined of a sinusoidalpositional embedding followed
-    by a linear layer, followed by an activation function,
+    by a linear layer, followed by a GELU activation function,
+    (could also be SiLU),
     followed by a linear layer.
     """
 
@@ -249,59 +273,84 @@ class TimeEmbedding(nn.Module):
         return emb
 
 
+class BottleNeck(nn.Module):
+    def __init__(self, channels: int, time_channels: int) -> None:
+        super().__init__()
+        self.res1 = ResNetBlock(
+            dim=channels, dim_out=channels, time_emb_dim=time_channels
+        )
+        self.attn = Residual(PreNorm(channels, Attention(channels)))
+        self.res2 = ResNetBlock(
+            dim=channels, dim_out=channels, time_emb_dim=time_channels
+        )
+
+    def forward(self, x: torch.Tensor, t: torch.Tensor):
+        x = self.res2(self.attn(self.res1(x)))
+
+        return x
+
+
 class UNet(nn.Module):
     def __init__(
         self,
-        image_channels: int = 3,
-        n_channels: int = 64,
-        ch_mults: Union[Tuple[int, ...], List[int]] = (1, 2, 4, 8),
-        out_channels=1,
+        in_channels: int,
+        out_channels: int,
+        channels: int = 64,
+        channel_multipliers: Union[Tuple[int, ...], List[int]] = (1, 2, 4, 8),
         with_time_emb: bool = True,
         num_classes: int = None,
     ) -> None:
+        """
+        Args:
+        in_channels (int): number of channels in the input feature map
+        out_channels (int): number of channels in the output feature map
+        channels (int, optional): base channel count for the model.
+            Defaults to 64.
+        channel_multipliers (Union[Tuple[int, ...], List[int]], optional):
+            Defaults to (1, 2, 4, 8).
+        with_time_emb (bool, optional): Whether to use time embeddings or not.
+            Defaults to True.
+        num_classes (int, optional): number of classes.
+            Defaults to None.
+        """
         super().__init__()
-        self.image_channels = image_channels
-        self.channels = [image_channels] + list(map(lambda x: x * n_channels, ch_mults))
+        self.channels_list = [channels] + [channels * m for m in channel_multipliers]
 
         if with_time_emb:
-            self.time_dim = n_channels * 4
-            self.time_emb = TimeEmbedding(self.time_dim)  # why * 4
+            d_time_emb = channels * 4  # why * 4?
+            self.time_emb = TimeEmbedding(d_time_emb)
         else:
-            self.time_dim = None
+            d_time_emb = None
             self.time_emb = None
 
+        # if conditioning on classes, create embedding to add to the time embedding
         if num_classes is not None:
-            self.label_emb = nn.Embedding(num_classes, self.time_dim)
+            self.label_emb = nn.Embedding(num_classes, d_time_emb)
 
-        self.encoder = Encoder(dims=self.channels, time_emb_dim=self.time_dim)
+        self.initial_conv = nn.Conv2d(in_channels, channels, kernel_size=3, padding=1)
 
-        self.bottleneck = ResNetBlock(
-            dim=self.channels[-2], dim_out=self.channels[-1], time_emb_dim=self.time_dim
-        )
-        self.bottleneck_attn = Residual(
-            PreNorm(self.channels[-1], Attention(self.channels[-1]))
+        self.encoder = Encoder(dims=self.channels_list, time_emb_dim=d_time_emb)
+
+        self.bottleneck = BottleNeck(
+            channels=self.channels_list[-1],
+            time_channels=d_time_emb,
         )
 
         self.decoder = Decoder(
-            dims=list(reversed(self.channels)),
-            time_emb_dim=self.time_dim,
+            dims=list(reversed(self.channels_list)),
+            time_emb_dim=d_time_emb,
         )
 
         self.final_conv = nn.Sequential(
-            ResNetBlock(dim=n_channels, dim_out=n_channels),
-            nn.Conv2d(in_channels=n_channels, out_channels=out_channels, kernel_size=1),
+            ResNetBlock(dim=channels, dim_out=channels),
+            nn.Conv2d(in_channels=channels, out_channels=out_channels, kernel_size=1),
         )
 
     def encode(self, x: torch.Tensor, t: torch.Tensor = None):
         x, enc_frts = self.encoder(x, t)
+        h = self.bottleneck(x, t)
 
-        return x, enc_frts
-
-    def bottleneck_layer(self, x: torch.Tensor, t: torch.Tensor):
-        x = self.bottleneck(x, t)
-        x = self.bottleneck_attn(x)
-
-        return x
+        return h, enc_frts
 
     def decode(self, x: torch.Tensor, enc_ftrs: list(), t: torch.Tensor):
         x = self.decoder(x, enc_ftrs, t)
@@ -314,19 +363,24 @@ class UNet(nn.Module):
         t: torch.Tensor,
         y: torch.Tensor,
     ) -> torch.Tensor:
-        t = self.time_emb(t) if exists(self.time_emb) else None
+        """
+        Args:
+        x_noisy (torch.Tensor): input tensor of shape [batch_size, channels, width, height]
+        t (torch.Tensor): timesteps  of shape [batch_size]
+        y (torch.Tensor): classes.
+        """
+        t_emb = self.time_emb(t) if exists(self.time_emb) else None
 
         if y is not None:
-            t += self.label_emb(y)
+            t_emb += self.label_emb(y)
+
+        x = self.initial_conv(x_noisy)
 
         # downsample
-        x, enc_ftrs = self.encode(x_noisy, t)
-
-        # bottleneck
-        h = self.bottleneck_layer(x, t)
+        z, enc_ftrs = self.encode(x, t_emb)
 
         # upsample
-        x = self.decode(h, enc_ftrs, t)
+        x = self.decode(z, enc_ftrs, t_emb)
 
         # final layer
         out = self.final_conv(x)
