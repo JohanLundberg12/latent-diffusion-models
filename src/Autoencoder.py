@@ -399,6 +399,8 @@ class Autoencoder(nn.Module):
         n_resnet_blocks: int = 2,
     ):
         super().__init__()
+        self.z_channels = z_channels
+
         self.encoder = Encoder(
             channels=channels,
             channel_multipliers=channel_multipliers,
