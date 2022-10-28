@@ -9,6 +9,7 @@ import wandb
 from src.Autoencoder import Autoencoder
 from src.DDPM import Diffusion
 from src.DiffusionModelTrainer import DiffusionModelTrainer
+from src.LatentDiffusionModel import LatentDiffusionModel
 from src.UNet import UNet
 
 from src import prepare_experiment
@@ -41,27 +42,45 @@ def main(configurations):
 
         (train_loader, val_loader, classes, loss_fn, scaler) = make_settings(config)
 
-        eps_model = UNet(
-            in_channels=config.data["image_channels"],
-            out_channels=config.model["params"]["out_channels"],
-            channels=config.model["params"]["channels"],
-            channel_multipliers=config.model["params"]["channel_multipliers"],
-            with_time_emb=config.model["params"]["with_time_emb"],
-            num_classes=config.num_classes,
-        )
-        optimizer = torch.optim.Adam(eps_model.parameters(), lr=config.learning_rate)
-
-        if config.diffusion["type"] == "latent":
-            autoencoder = Autoencoder()
-            load_model(model=autoencoder, config=config, name="autoencoder")
-        else:
-            autoencoder = None
-
         # Create DDPM model
         diffusion_model = Diffusion(
             n_steps=config.diffusion["n_steps"],
             device=config.device,
         )
+
+        if config.diffusion["type"] == "latent":
+            autoencoder = Autoencoder(
+                in_channels=config.data["image_channels"],
+                out_channels=config.data["image_channels"],
+            )
+            load_model(autoencoder, path="models/" + config.autoencoder["name"])
+
+            eps_model = UNet(
+                in_channels=autoencoder.z_channels,
+                out_channels=autoencoder.z_channels,
+                channels=config.model["params"]["channels"],
+                channel_multipliers=config.model["params"]["channel_multipliers"],
+                with_time_emb=config.model["params"]["with_time_emb"],
+                num_classes=config.num_classes,
+            )
+            eps_model = LatentDiffusionModel(
+                eps_model=eps_model,
+                autoencoder=autoencoder,
+                latent_scaling_factor=1,
+                n_steps=config.diffusion["n_steps"],
+                linear_start=0.05,
+                linear_end=0.1,
+            )
+        else:
+            eps_model = UNet(
+                in_channels=config.data["image_channels"],
+                out_channels=config.model["params"]["out_channels"],
+                channels=config.model["params"]["channels"],
+                channel_multipliers=config.model["params"]["channel_multipliers"],
+                with_time_emb=config.model["params"]["with_time_emb"],
+                num_classes=config.num_classes,
+            )
+        optimizer = torch.optim.Adam(eps_model.parameters(), lr=config.learning_rate)
 
         wandb.watch(eps_model, loss_fn, log="all", log_freq=10)
         wandb.define_metric("train_loss", summary="min")
@@ -80,7 +99,6 @@ def main(configurations):
             classes=classes,
             device=config.device,
             epochs=config.epochs,
-            autoencoder=autoencoder,
         )
 
         # Start train and eval steps
