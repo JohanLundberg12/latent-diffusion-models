@@ -1,0 +1,16 @@
+# Train a diffusion_based_autoencoder
+name: resnet_testing
+type: resnet
+testing: True
+batch_size: 16
+epochs: 10
+learning_rate: 0.0001
+loss_fn: cross-entropy
+model: 
+  type: resnet
+  params:
+    image_size: 16
+data:
+  dataset: MNIST
+  image_channels: 1
+
