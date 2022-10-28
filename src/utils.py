@@ -7,8 +7,6 @@ from tqdm import tqdm
 import torch
 import torch.nn.functional as f
 
-from .UNet import UNet
-
 from .data_utils import get_data
 
 
@@ -83,19 +81,6 @@ def progress_bar(loader, desc=""):
 
 def load_model(model, config, name):
     model.load_state_dict(torch.load(config.models_path + "/" + name + ".pt"))
-
-
-def instantiate_unet(config: dict = None):
-    model = UNet(
-        image_channels=config.data["image_channels"],
-        n_channels=config.model["params"]["n_channels"],
-        ch_mults=config.model["params"]["channel_multipliers"],
-        out_channels=config.model["params"]["out_channels"],
-        with_time_emb=config.model["params"]["with_time_emb"],
-        num_classes=config.num_classes,
-    )
-
-    return model
 
 
 # reconstruction_term: how to tune?
