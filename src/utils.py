@@ -79,8 +79,8 @@ def progress_bar(loader, desc=""):
     return tqdm(enumerate(loader), total=len(loader), desc=desc)
 
 
-def load_model(model, config, name):
-    model.load_state_dict(torch.load(config.models_path + "/" + name + ".pt"))
+def load_model(model, path: str):
+    model.load_state_dict(torch.load(path))
 
 
 # reconstruction_term: how to tune?
