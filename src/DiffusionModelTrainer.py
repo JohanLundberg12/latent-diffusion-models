@@ -146,9 +146,12 @@ class DiffusionModelTrainer:
         with torch.inference_mode():
             for _, (data, targets) in pbar:
                 data, targets = data.to(self.device), targets.to(self.device)
-                if self.autoencoder is not None:
-                    z_sem, _ = self.autoencoder.encode(data)
-                    noise, xt, t = self.diffusion_model(z_sem)
+                if isinstance(self.eps_model, LatentDiffusionModel):
+                    # encode image
+                    z = self.eps_model.autoencoder_encode(data)
+
+                    # latent diffusion model forward pass: add noise to encoding
+                    noise, xt, t = self.diffusion_model(z)
                 else:
                     # diffusion model forward pass
                     noise, xt, t = self.diffusion_model(data)
