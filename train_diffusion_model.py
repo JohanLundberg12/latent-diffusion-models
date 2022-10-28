@@ -5,18 +5,19 @@ import sys
 import torch
 import yaml
 import wandb
-from src import prepare_experiment
 
+from src.Autoencoder import Autoencoder
+from src.DDPM import Diffusion
+from src.DiffusionModelTrainer import DiffusionModelTrainer
+from src.UNet import UNet
+
+from src import prepare_experiment
 from src.utils import (
-    instantiate_unet,
     load_model,
     make_settings,
     save_model,
 )
 
-from src.Autoencoder import Autoencoder
-from src.DDPM import Diffusion
-from src.DiffusionModelTrainer import DiffusionModelTrainer
 
 # cudnn autotuner is going run a short benchmark and will select the algorithm
 # with the best performance on a given hardware for a given input size.
@@ -40,7 +41,14 @@ def main(configurations):
 
         (train_loader, val_loader, classes, loss_fn, scaler) = make_settings(config)
 
-        eps_model = instantiate_unet(config)
+        eps_model = UNet(
+            in_channels=config.data["image_channels"],
+            out_channels=config.model["params"]["out_channels"],
+            channels=config.model["params"]["channels"],
+            channel_multipliers=config.model["params"]["channel_multipliers"],
+            with_time_emb=config.model["params"]["with_time_emb"],
+            num_classes=config.num_classes,
+        )
         optimizer = torch.optim.Adam(eps_model.parameters(), lr=config.learning_rate)
 
         if config.diffusion["type"] == "latent":
