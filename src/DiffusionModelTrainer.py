@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Union
 from time import time
 import numpy as np
 
@@ -9,15 +9,15 @@ from torch.utils.data import DataLoader
 
 import wandb
 
-from src.Autoencoder import Autoencoder
+from .DDPM import Diffusion
+from .UNet import UNet
+from .LatentDiffusionModel import LatentDiffusionModel
+from .EarlyStopping import EarlyStopping
+
 from src.transforms import (
     get_reverse_image_transform,
     reverse_transform,
 )
-from .EarlyStopping import EarlyStopping
-
-from .UNet import UNet
-from .DDPM import Diffusion
 from .utils import progress_bar
 
 
@@ -27,7 +27,7 @@ class DiffusionModelTrainer:
         self,
         config: dict,
         diffusion_model: Diffusion,
-        eps_model: UNet,
+        eps_model: Union[UNet, LatentDiffusionModel],
         train_loader: DataLoader,
         val_loader: DataLoader,
         cfg_scale: int,  # classifier free guidance scale
@@ -37,16 +37,12 @@ class DiffusionModelTrainer:
         classes: list(),
         device: str,
         epochs: int,
-        autoencoder: Autoencoder = None,
     ) -> None:
         self.config = config
         self.device = device
         self.epochs = epochs
         self.classes = classes
 
-        self.autoencoder = autoencoder
-        if autoencoder is not None:
-            self.autoencoder = self.autoencoder.to(self.device)
         self.diffusion_model = diffusion_model.to(self.device)
         self.eps_model = eps_model.to(self.device)
 
@@ -82,11 +78,17 @@ class DiffusionModelTrainer:
             prepare_time = start_time - time()
 
             with torch.cuda.amp.autocast():
-                if self.autoencoder is not None:
-                    z_sem, _ = self.autoencoder.encode(data)
-                    noise, xt, t = self.diffusion_model(z_sem)
+
+                # if latent noise predictor model
+                if isinstance(self.eps_model, LatentDiffusionModel):
+
+                    # encode image
+                    z = self.eps_model.autoencoder_encode(data)
+
+                    # latent diffusion model forward pass: add noise to encoding
+                    noise, xt, t = self.diffusion_model(z)
                 else:
-                    # diffusion model forward pass
+                    # pixel diffusion model forward pass
                     noise, xt, t = self.diffusion_model(data)
 
                 # perc. of time we do no guidance
