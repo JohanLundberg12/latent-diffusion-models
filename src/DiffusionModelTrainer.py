@@ -201,8 +201,8 @@ class DiffusionModelTrainer:
             results["valid_losses"].append(valid_loss)
 
             # Log results to wandb
-            wandb.log({"train_loss": train_loss, "epoch": epoch})
-            wandb.log({"val_loss": valid_loss, "epoch": epoch})
+            wandb.log({"train_loss": train_loss, "epoch": epoch}, step=epoch)
+            wandb.log({"val_loss": valid_loss, "epoch": epoch}, step=epoch)
 
             if epoch % 2 == 0:
                 tensor_image = self.diffusion_model.sample(
@@ -211,8 +211,8 @@ class DiffusionModelTrainer:
                     shape=(
                         len(self.classes),
                         self.config.data["image_channels"],
-                        self.config.model["params"]["image_size"],
-                        self.config.model["params"]["image_size"],
+                        self.config.data["image_size"],
+                        self.config.data["image_size"],
                     ),
                     device=self.device,
                     cfg_scale=self.cfg_scale,
@@ -223,14 +223,10 @@ class DiffusionModelTrainer:
                     for image in tensor_image
                 ]
 
-                for i, img in enumerate(images):
-                    wandb.log(
-                        {
-                            f"Sample image {i} at epoch: {epoch}": wandb.Image(
-                                img, caption=f"image {i}"
-                            )
-                        }
-                    )
+                wandb.log(
+                    {"images": [wandb.Image(image) for image in images]},
+                    step=epoch,
+                )
 
             self.early_stopping(val_loss=valid_loss, model=self.eps_model)
 
