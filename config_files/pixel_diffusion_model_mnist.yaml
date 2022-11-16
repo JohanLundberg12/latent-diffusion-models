@@ -1,14 +1,14 @@
 # Train or sample from a pixel based diffusion model
-name: "pixel_diffusion_model"
+name: "pixel_diffusion_model_img16"
 type: pixel
-testing: True
+testing: False
 diffusion:
   type: pixel
-  n_steps: 10 # T (100-400)
-  n_samples: 4 #number of generated examples after training
-batch_size: 1
-epochs: 5
-learning_rate: 0.005
+  n_steps: 400 # T (100-400)
+  n_samples: 1 #number of generated examples after training
+batch_size: 64
+epochs: 50
+learning_rate: 0.0005
 loss_fn: mse
 model: 
   target: src.UNet.UNet
