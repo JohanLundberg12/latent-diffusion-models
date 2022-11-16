@@ -1,0 +1,21 @@
+# Train a resnet classifier
+name: resnet_testing_2
+type: resnet
+testing: True
+batch_size: 16
+epochs: 10
+learning_rate: 0.0001
+loss_fn: cross-entropy
+model: 
+  target: src.ResNetClassifier.ResNetBase
+  params:
+    img_channels: 1 # MNIST is gray-scale
+    out_channels: 10 # 10 classes in MNIST
+    n_blocks: [2, 2, 2, 2]
+    n_channels: [64, 128, 256, 512]
+    
+data:
+  dataset: MNIST
+  image_channels: 1
+  image_size: 16
+

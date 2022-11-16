@@ -8,9 +8,14 @@ learning_rate: 0.00001
 loss_fn: elbo
 model: 
   type: Autoencoder
+  target: src.Autoencoder.Autoencoder
   params:
-    image_size: 16
+    in_channels: 1
+    z_channels: 512
+    channels: 64
+    out_channels: 1
 data:
   dataset: MNIST
   image_channels: 1
+  image_size: 16
 
