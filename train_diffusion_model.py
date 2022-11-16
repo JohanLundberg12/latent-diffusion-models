@@ -1,24 +1,18 @@
 """Script to train a pixel or latent diffusion model
 """
-import os.path
 import sys
+
 import torch
 import yaml
-import wandb
 
+import wandb
+from src import prepare_experiment
 from src.Autoencoder import Autoencoder
 from src.DDPM import Diffusion
 from src.DiffusionModelTrainer import DiffusionModelTrainer
 from src.LatentDiffusionModel import LatentDiffusionModel
 from src.UNet import UNet
-
-from src import prepare_experiment
-from src.utils import (
-    load_model,
-    make_settings,
-    save_model,
-)
-
+from src.utils import load_model, make_settings
 
 # cudnn autotuner is going run a short benchmark and will select the algorithm
 # with the best performance on a given hardware for a given input size.
@@ -73,12 +67,12 @@ def main(configurations):
             )
         else:
             eps_model = UNet(
-                in_channels=config.data["image_channels"],
+                in_channels=config.model["params"]["in_channels"],
                 out_channels=config.model["params"]["out_channels"],
                 channels=config.model["params"]["channels"],
                 channel_multipliers=config.model["params"]["channel_multipliers"],
                 with_time_emb=config.model["params"]["with_time_emb"],
-                num_classes=config.num_classes,
+                num_classes=config.model["params"]["num_classes"],
             )
         optimizer = torch.optim.Adam(eps_model.parameters(), lr=config.learning_rate)
 
@@ -103,11 +97,6 @@ def main(configurations):
 
         # Start train and eval steps
         trainer.train()
-
-        save_model(
-            model=eps_model, target_dir="models", model_name=f"{config.name}" + ".pt"
-        )
-        wandb.save(os.path.join("models", f"{config.name}.pt"))
 
 
 if __name__ == "__main__":

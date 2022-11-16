@@ -1,15 +1,12 @@
-import os
 import sys
-import yaml
-import wandb
 
 import torch
+import yaml
 
-from src.ResNetClassifier import ResNetBase
-from src.ResNetTrainer import ResNetTrainer
-
+import wandb
 from src import prepare_experiment
-from src.utils import make_settings, save_model
+from src.ResNetTrainer import ResNetTrainer
+from src.utils import get_model_from_config, make_settings
 
 # cudnn autotuner is going run a short benchmark and will select the algorithm
 # with the best performance on a given hardware for a given input size.
@@ -22,19 +19,14 @@ def main(config: dict):
 
     (train_loader, val_loader, classes, loss_fn, scaler) = make_settings(config)
 
-    # n_blocks[0] = 2 means two resnet blocks for the feature mapping with 64 channels
-    # also, this one won't have any downscaling as this was done in the initial conv layer.
-    model = ResNetBase(
-        out_channels=len(classes),
-        n_blocks=[2, 2, 2, 2],
-        n_channels=[64, 128, 256, 512],
-        img_channels=config.data["image_channels"],
-    )
+    model = get_model_from_config(config)
     optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
 
-    wandb.watch(model, loss_fn, log="all", log_freq=10)
+    wandb.watch(model, criterion=loss_fn, log="all", log_freq=10)
     wandb.define_metric("train_loss", summary="min")
     wandb.define_metric("valid_loss", summary="min")
+    wandb.define_metric("train_f1", summary="max")
+    wandb.define_metric("valid_f1", summary="max")
 
     trainer = ResNetTrainer(
         config=config,
@@ -51,9 +43,6 @@ def main(config: dict):
 
     trainer.train()
 
-    save_model(model=model, target_dir="models", model_name=f"{config.name}" + ".pt")
-    wandb.save(os.path.join("models", f"{config.name}.pt"))
-
 
 if __name__ == "__main__":
     config_file = sys.argv[1]
@@ -63,5 +52,5 @@ if __name__ == "__main__":
         project=configurations["name"], entity="itu-gen", config=configurations
     ):
         config = wandb.config
-        config = prepare_experiment(config, delete=True)
+        config = prepare_experiment(config, delete=False)
         main(config=config)
