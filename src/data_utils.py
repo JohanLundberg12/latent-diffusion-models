@@ -1,7 +1,6 @@
 import numpy as np
-import torch
-from torch.utils.data import Subset
 import torchvision
+from torch.utils.data import DataLoader, Subset
 
 from .transforms import get_image_transform
 
@@ -22,10 +21,6 @@ class CelebADataset(torchvision.datasets.CelebA):
 
 
 class MNISTDataset(torchvision.datasets.MNIST):
-    """
-    ### MNIST dataset
-    """
-
     def __init__(self, config, image_size, train):
         transform = get_image_transform(image_size=image_size)
 
@@ -41,6 +36,8 @@ class MNISTDataset(torchvision.datasets.MNIST):
 
 
 def _get_dataset(config: dict, name: str, image_size: int, train: bool):
+    """Returns the dataset."""
+
     if name == "MNIST":
         dataset = MNISTDataset(config, image_size, train=train)
     elif name == "CelebA":
@@ -56,18 +53,18 @@ def _get_dataset(config: dict, name: str, image_size: int, train: bool):
 
 
 def _set_dataloader(dataset, batch_size):
+    """Sets the data loader for the dataset."""
     # Use num_workers > 0 to enable asynchronous data processing.
     # pin_memory=True to make CPU to GPU copies asynchronous.
     # num_workers is usually to be tuned, depending on your hardware.
-    return torch.utils.data.DataLoader(
-        dataset, batch_size, shuffle=True, num_workers=4, pin_memory=True
-    )
+
+    return DataLoader(dataset, batch_size, shuffle=True, num_workers=4, pin_memory=True)
 
 
-def _get_classes(dataset):
-    classes = list(set(dataset.targets.numpy()))
+def _get_classes(dataset) -> list:
+    """Returns the classes of the dataset."""
 
-    return classes
+    return list(set(dataset.targets.numpy()))
 
 
 def get_data(config: dict, testing: bool):
@@ -75,7 +72,7 @@ def get_data(config: dict, testing: bool):
     of classes.
     """
     name = config.data["dataset"]
-    image_size = config.model["params"]["image_size"]
+    image_size = config.data["image_size"]
     batch_size = config.batch_size
 
     trainset = _get_dataset(config, name, image_size, train=True)
