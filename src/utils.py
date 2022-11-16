@@ -1,7 +1,8 @@
-import argparse
 import errno
+import importlib
 import pathlib
 from pathlib import Path
+from typing import Callable
 from tqdm import tqdm
 
 import torch
@@ -11,8 +12,8 @@ from .data_utils import get_data
 
 
 def create_folder(path: pathlib.PosixPath) -> None:
-    """Args:
-    path (pathlib.Path): relative path to be created"""
+    """Creates a folder if it doesn't exist"""
+
     if isinstance(path, str):
         path = Path(path)
 
@@ -24,63 +25,22 @@ def create_folder(path: pathlib.PosixPath) -> None:
         pass
 
 
-def create_parser():
-    parser = argparse.ArgumentParser()
-
-    # experiment specific args
-    parser.add_argument("-ds", "--dataset", type=str, help="Training data")
-    parser.add_argument(
-        "-dft",
-        "--diffusion_type",
-        default="pixel",
-        type=str,
-        help="This is the type of space the forward diffusion happens at, latent or pixel space",
-    )
-    parser.add_argument(
-        "-nt",
-        "--noise_type",
-        default="gaussian",
-        type=str,
-        help="This is the type of noise applied in the forward diffusion process",
-    )
-
-    # universal experiment settings
-    parser.add_argument(
-        "-t",
-        "--time_steps",
-        default=10,
-        type=int,
-        help="This is the number of steps T during the forward process",
-    )
-    parser.add_argument("-b", "--batch_size", default=2, type=int)
-    parser.add_argument("-e", "--epochs", default=2, type=int)
-
-    return parser
-
-
-def save_model(model: torch.nn.Module, target_dir: str, model_name: str):
-    # Create dir if not exists
-    target_dir_path = Path(target_dir)
-    target_dir_path.mkdir(parents=True, exist_ok=True)
-
-    assert model_name.endswith(".pth") or model_name.endswith(
-        ".pt"
-    ), "should end with '.pt' or '.pth'"
-
-    # Create model save path
-    model_save_path = target_dir_path / model_name
-
-    # Save the model state_dict()
-    print(f"[INFO] Saving model to: {model_save_path}")
-    torch.save(obj=model.state_dict(), f=model_save_path)
-
-
 def progress_bar(loader, desc=""):
+    """Returns a progress bar for a given loader"""
+
     return tqdm(enumerate(loader), total=len(loader), desc=desc)
 
 
-def load_model(model, path: str):
-    model.load_state_dict(torch.load(path))
+def load_model(model: torch.nn.Module, state_dict_path: str) -> torch.nn.Module:
+    """Loads a model from a state dict path"""
+
+    # load model weights
+    weights = torch.load(state_dict_path)
+
+    # load weights into model
+    model.load_state_dict(weights)
+
+    return model
 
 
 # reconstruction_term: how to tune?
@@ -100,7 +60,9 @@ def elbo_loss_fn(data, outputs, mu, log_var, reconstruction_term=1):
     return elbo_loss
 
 
-def _get_loss_fn(loss_fn):
+def _get_loss_fn(loss_fn) -> Callable:
+    """Returns a loss function"""
+
     if loss_fn == "mse":
         return f.mse_loss
     elif loss_fn == "elbo":
@@ -112,12 +74,12 @@ def _get_loss_fn(loss_fn):
 
 
 def make_settings(config):
-    """Args:
-    config (dict): yaml configurations
-
+    """Creates a settings dict from a config dict
+    Args:
+        config (dict): yaml configurations
     Returns:
         dict: Containing dataloaders, classes, loss_fn,
-        scaler
+        scaler: GradScaler for mixed precision training
     """
     # Load data
     train_loader, val_loader, classes, num_classes = get_data(
@@ -136,3 +98,46 @@ def make_settings(config):
     scaler = torch.cuda.amp.GradScaler()
 
     return (train_loader, val_loader, classes, loss_fn, scaler)
+
+
+def get_obj_from_str(string: str, reload=False):
+    """This function takes a string and returns the object
+    Args:
+        string (_type_): path to the object
+        reload (bool, optional): Whether to reload module. Defaults to False.
+    Returns:
+        object: The object
+    """
+    # Split string into module and class
+    module, cls = string.rsplit(".", 1)
+
+    # Import module
+    if reload:
+        module_imp = importlib.import_module(module)
+        importlib.reload(module_imp)
+
+    # Get class
+    return getattr(importlib.import_module(module, package=None), cls)
+
+
+def instantiate_from_config(config: dict) -> torch.nn.Module:
+    """Instantiates a class from a config dict"""
+
+    # Get class
+    return get_obj_from_str(config["target"])(**config.get("params", dict()))
+
+
+# state_dict_path example: 'load/from/path/model.pth'
+def get_model_from_config(config, state_dict_path: str = None) -> torch.nn.Module:
+    """Instantiates a model from a config dict"""
+
+    # Get model
+    model = instantiate_from_config(config["model"])
+
+    # Load state dict if path provided
+    if state_dict_path:
+        print(f"Loading model from {state_dict_path}")
+
+        model = load_model(model, state_dict_path)
+
+    return model

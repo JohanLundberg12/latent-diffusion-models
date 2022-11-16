@@ -1,18 +1,12 @@
-import os
 import sys
-import yaml
-import wandb
 
 import torch
+import yaml
 
+import wandb
 from src import prepare_experiment
-from src.utils import (
-    make_settings,
-    save_model,
-)
-
-from src.Autoencoder import Autoencoder
 from src.AutoencoderTrainer import AutoencoderTrainer
+from src.utils import get_model_from_config, make_settings
 
 # cudnn autotuner is going run a short benchmark and will select the algorithm
 # with the best performance on a given hardware for a given input size.
@@ -32,19 +26,16 @@ def main(configurations):
 
         (train_loader, val_loader, classes, loss_fn, scaler) = make_settings(config)
 
-        autoencoder = Autoencoder(
-            in_channels=config.data["image_channels"],
-            out_channels=config.data["image_channels"],
-        )
-        optimizer = torch.optim.Adam(autoencoder.parameters(), lr=config.learning_rate)
+        model = get_model_from_config(config)
+        optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
 
-        wandb.watch(autoencoder, loss_fn, log="all", log_freq=10)
+        wandb.watch(model, loss_fn, log="all", log_freq=10)
         wandb.define_metric("train_loss", summary="min")
         wandb.define_metric("valid_loss", summary="min")
 
         trainer = AutoencoderTrainer(
             config=config,
-            model=autoencoder,
+            model=model,
             train_loader=train_loader,
             val_loader=val_loader,
             loss_fn=loss_fn,
@@ -57,11 +48,6 @@ def main(configurations):
 
         # Start train and eval steps
         trainer.train()
-
-        save_model(
-            model=autoencoder, target_dir="models", model_name=f"{config.name}" + ".pt"
-        )
-        wandb.save(os.path.join("models", f"{config.name}.pt"))
 
 
 if __name__ == "__main__":

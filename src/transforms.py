@@ -1,14 +1,13 @@
 import numpy as np
 import torch
+from PIL import Image
 from torchvision import transforms
 from torchvision.transforms import Lambda
-from PIL import Image
 
 
 def get_image_transform(image_size):
-    """Transforms images to tensors and scales their pixel values to
-    be between -1 and 1.
-    """
+    """Returns a transform that scales the image pixel values to [-1, 1]"""
+
     transform = transforms.Compose(
         [
             transforms.Resize((image_size, image_size)),
@@ -21,6 +20,9 @@ def get_image_transform(image_size):
 
 
 def get_reverse_image_transform():
+    """Returns a transform that scales the image pixel values to [0, 255]
+    and converts it to a PIL image."""
+
     reverse_transform = transforms.Compose(
         [
             Lambda(lambda t: (t + 1) / 2),
@@ -34,7 +36,8 @@ def get_reverse_image_transform():
 
 
 def image_transform(image: Image.Image, transform) -> torch.Tensor:
-    """Image to tensor transform. Values converted to 0-255."""
+    """Transforms an image to a tensor and scales its pixel values to be between -1 and 1."""
+
     image_tensor = transform(image)
     image_tensor = image_tensor.unsqueeze(0)  # Reshape to (B, C, H, W)
 
@@ -42,6 +45,8 @@ def image_transform(image: Image.Image, transform) -> torch.Tensor:
 
 
 def reverse_transform(image_tensor, transform) -> Image.Image:
+    """Transforms a tensor to an image and scales its pixel values to be between 0 and 255."""
+
     if len(image_tensor.shape) == 4:
         image_tensor = image_tensor.squeeze()  # Reshape to (C, H, W)
 
