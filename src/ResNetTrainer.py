@@ -1,7 +1,9 @@
-import wandb
 from time import time
+
 import torch
 from sklearn.metrics import f1_score
+
+import wandb
 from src.EarlyStopping import EarlyStopping
 from src.ResNetClassifier import ResNetBase
 from src.utils import progress_bar
@@ -191,6 +193,8 @@ class ResNetTrainer:
             # Log results to wandb
             wandb.log({"train_loss": train_loss, "epoch": epoch})
             wandb.log({"val_loss": valid_loss, "epoch": epoch})
+            wandb.log({"train_f1": train_f1, "epoch": epoch})
+            wandb.log({"val_f1": valid_f1, "epoch": epoch})
 
             self.early_stopping(val_loss=valid_loss, model=self.model)
 

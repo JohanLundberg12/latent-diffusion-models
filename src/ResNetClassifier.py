@@ -147,14 +147,16 @@ class BottleneckResidualBlock(nn.Module):
 # The feature map size is halved after a few blocks with a block of stride length 2.
 # The number of channels is increased when the feature map size is reduced.
 # Finally the feature map is average pooled to get a vector representation.
+# n_blocks[0] = 2 means two resnet blocks for the feature mapping with 64 channels
+# also, this one won't have any downscaling as this was done in the initial conv layer.
 class ResNetBase(nn.Module):
     def __init__(
         self,
+        img_channels: int,
         out_channels: int,
         n_blocks: List[int],
         n_channels: List[int],
         bottlenecks: Optional[List[int]] = None,
-        img_channels: int = 3,
         first_kernel_size: int = 7,
     ):
         """Base of ResNet with stacked residual blocks and a bottlnect residual block.
