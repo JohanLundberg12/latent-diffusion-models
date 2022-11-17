@@ -315,6 +315,7 @@ class UNet(nn.Module):
         """
         super().__init__()
         self.channels_list = [channels] + [channels * m for m in channel_multipliers]
+        self.num_classes = num_classes
 
         if with_time_emb:
             d_time_emb = channels * 4  # why * 4?
