@@ -158,6 +158,58 @@ class ResNetTrainer:
 
         return valid_loss, avg_valid_f1
 
+    def pretrain(self, dataloader):
+        self.model.train()
+
+        pretrain_loss: float = 0.0
+        pretrain_f1 = list()
+
+        start_time = time()
+
+        pbar = progress_bar(dataloader, desc="pretrain step")
+
+        for _, (data, targets) in pbar:
+            data, targets = data.to(self.device), targets.to(self.device)
+            prepare_time = start_time - time()
+
+            with torch.cuda.amp.autocast():
+                outputs = self.model(data)
+                loss = self.loss_fn(outputs, targets)
+
+            self.optimizer.zero_grad(set_to_none=True)
+
+            self.scaler.scale(loss).backward()
+
+            self.scaler.step(self.optimizer)
+
+            self.scaler.update()
+
+            # Add total batch loss to total loss
+            batch_loss = loss.item() * data.size(0)  # not sure about data.size(0)
+            pretrain_loss += batch_loss
+
+            y_preds = outputs.argmax(-1).cpu().numpy()
+            y_target = targets.cpu().numpy()
+            batch_f1 = f1_score(y_target, y_preds, labels=self.classes, average="micro")
+            pretrain_f1.append(batch_f1)
+
+            process_time = start_time - time() - prepare_time
+            compute_efficency = process_time / (process_time + prepare_time)
+            pbar.set_description(
+                "Pretrain step, "
+                f"compute efficiency: {compute_efficency:.2f}, "
+                f"batch loss: {batch_loss:.4f}, "
+                f"train loss: {pretrain_loss:.4f}, "
+                f"batch f1: {batch_f1:.4f}, "
+            )
+            start_time = time()
+
+        # Calculate average loss and avg f1 for this epoch
+        pretrain_loss /= len(self.train_loader)
+        avg_pretrain_f1 = sum(pretrain_f1) / len(pretrain_f1)
+
+        return pretrain_loss, avg_pretrain_f1
+
     def train(self):
         """
         ### Training loop
@@ -192,9 +244,9 @@ class ResNetTrainer:
 
             # Log results to wandb
             wandb.log({"train_loss": train_loss, "epoch": epoch})
-            wandb.log({"val_loss": valid_loss, "epoch": epoch})
+            wandb.log({"valid_loss": valid_loss, "epoch": epoch})
             wandb.log({"train_f1": train_f1, "epoch": epoch})
-            wandb.log({"val_f1": valid_f1, "epoch": epoch})
+            wandb.log({"valid_f1": valid_f1, "epoch": epoch})
 
             self.early_stopping(val_loss=valid_loss, model=self.model)
 
@@ -215,4 +267,26 @@ class ResNetTrainer:
             f"\navg train-f1: {avg_train_f1}",
             f"\navg valid-f1: {avg_valid_f1}",
         )
+
+        wandb.log({"train_time": stop - start})
         print("Training done.")
+
+    @torch.inference_mode()
+    def predict(self, test_loader):
+        print("Predicting on test set...")
+
+        self.model.eval()
+        f1_scores = []
+
+        pbar = progress_bar(test_loader, desc="test step")
+
+        for i, (data, targets) in pbar:
+            data = data.to(self.device)
+            output = self.model(data)
+
+            y_preds = output.argmax(-1).cpu().numpy()
+            y_target = targets.cpu().numpy()
+            batch_f1 = f1_score(y_target, y_preds, labels=self.classes, average="micro")
+            f1_scores.append(batch_f1)
+
+        return f1_scores, sum(f1_scores) / len(f1_scores)
