@@ -8,7 +8,6 @@ import yaml
 import wandb
 from src import prepare_experiment
 from src.Autoencoder import Autoencoder
-from src.DDPM import Diffusion
 from src.DiffusionModelTrainer import DiffusionModelTrainer
 from src.LatentDiffusionModel import LatentDiffusionModel
 from src.UNet import UNet
@@ -29,13 +28,10 @@ torch.backends.cudnn.benchmark = True
 
 def main(config: dict):
 
-    (train_loader, val_loader, classes, loss_fn, scaler) = make_settings(config)
+    (train_loader, _, val_loader, classes, loss_fn, scaler) = make_settings(config)
 
     # Create DDPM model
-    diffusion_model = Diffusion(
-        n_steps=config.diffusion["n_steps"],
-        device=config.device,
-    )
+    diffusion_model = get_model_from_config(config["diffusion"])
 
     if config.diffusion["type"] == "latent":
         autoencoder = Autoencoder(
@@ -61,7 +57,7 @@ def main(config: dict):
             linear_end=0.1,
         )
     else:
-        eps_model = get_model_from_config(config)
+        eps_model = get_model_from_config(config["model"])
 
     optimizer = torch.optim.Adam(eps_model.parameters(), lr=config.learning_rate)
 
