@@ -19,12 +19,6 @@ from src.utils import get_model_from_config, load_model, make_settings
 # but can lead to a significant speed up for conv layers.
 torch.backends.cudnn.benchmark = True
 
-# note to self:
-# some arguments should be model invariant and some should be
-# noise type dependent
-# then we need to instantiate a particular diffusion model and
-# noise type depending on diffusion_type and noise_type
-
 
 def main(config: dict):
 

@@ -53,7 +53,7 @@ def _get_dataset(config: dict, name: str, image_size: int, train: bool):
     return dataset
 
 
-def _set_dataloader(dataset, batch_size):
+def set_dataloader(dataset, batch_size):
     """Sets the data loader for the dataset."""
     # Use num_workers > 0 to enable asynchronous data processing.
     # pin_memory=True to make CPU to GPU copies asynchronous.
@@ -97,8 +97,8 @@ def get_data(config: dict, testing: bool):
         testset = Subset(testset, indices)
 
     num_classes = len(classes)
-    train_loader = _set_dataloader(trainset, batch_size)
-    val_loader = _set_dataloader(valset, batch_size)
-    test_loader = _set_dataloader(testset, batch_size)
+    train_loader = set_dataloader(trainset, batch_size)
+    val_loader = set_dataloader(valset, batch_size)
+    test_loader = set_dataloader(testset, batch_size)
 
     return train_loader, val_loader, test_loader, classes, num_classes
