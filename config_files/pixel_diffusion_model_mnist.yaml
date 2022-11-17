@@ -4,8 +4,11 @@ type: pixel
 testing: False
 diffusion:
   type: pixel
-  n_steps: 400 # T (100-400)
-  n_samples: 1 #number of generated examples after training
+  target: src.DDPM.Diffusion
+  params:
+    n_steps: 400 # T (100-400)
+    n_samples: 100 #number of generated examples after training
+    device: cuda
 batch_size: 64
 epochs: 50
 learning_rate: 0.0005
