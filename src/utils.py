@@ -82,7 +82,7 @@ def make_settings(config):
         scaler: GradScaler for mixed precision training
     """
     # Load data
-    train_loader, val_loader, classes, num_classes = get_data(
+    train_loader, val_loader, test_loader, classes, num_classes = get_data(
         config, testing=config.testing
     )
     # Update config
@@ -97,7 +97,7 @@ def make_settings(config):
     # float16 (Conv layers) gradients by minimizing gradient underflow
     scaler = torch.cuda.amp.GradScaler()
 
-    return (train_loader, val_loader, classes, loss_fn, scaler)
+    return (train_loader, val_loader, test_loader, classes, loss_fn, scaler)
 
 
 def get_obj_from_str(string: str, reload=False):
@@ -132,7 +132,7 @@ def get_model_from_config(config, state_dict_path: str = None) -> torch.nn.Modul
     """Instantiates a model from a config dict"""
 
     # Get model
-    model = instantiate_from_config(config["model"])
+    model = instantiate_from_config(config)
 
     # Load state dict if path provided
     if state_dict_path:

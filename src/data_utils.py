@@ -1,5 +1,6 @@
 import numpy as np
 import torchvision
+import torch
 from torch.utils.data import DataLoader, Subset
 
 from .transforms import get_image_transform
@@ -67,6 +68,15 @@ def _get_classes(dataset) -> list:
     return list(set(dataset.targets.numpy()))
 
 
+def _split_train_val(dataset, val_split: float) -> tuple:
+    """Splits the dataset into train and validation set."""
+
+    train_size = int((1 - val_split) * len(dataset))
+    val_size = len(dataset) - train_size
+
+    return torch.utils.data.random_split(dataset, [train_size, val_size])
+
+
 def get_data(config: dict, testing: bool):
     """Creates train and val data loader and return also the classes and number
     of classes.
@@ -76,16 +86,19 @@ def get_data(config: dict, testing: bool):
     batch_size = config.batch_size
 
     trainset = _get_dataset(config, name, image_size, train=True)
-    valset = _get_dataset(config, name, image_size, train=False)
     classes = _get_classes(trainset)
+    trainset, valset = _split_train_val(trainset, val_split=0.1)
+    testset = _get_dataset(config, name, image_size, train=False)
 
     if testing:
         indices = np.arange(0, 20)
         trainset = Subset(trainset, indices)
         valset = Subset(valset, indices)
+        testset = Subset(testset, indices)
 
     num_classes = len(classes)
     train_loader = _set_dataloader(trainset, batch_size)
     val_loader = _set_dataloader(valset, batch_size)
+    test_loader = _set_dataloader(testset, batch_size)
 
-    return train_loader, val_loader, classes, num_classes
+    return train_loader, val_loader, test_loader, classes, num_classes

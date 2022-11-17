@@ -8,7 +8,7 @@ import torch
 from src.utils import create_folder
 
 
-def _get_device():
+def get_device():
     if torch.cuda.is_available():
         device = torch.device("cuda")
     else:
@@ -48,7 +48,7 @@ def _setup_experiment_dirpath(config: dict, delete=False) -> Path:
 
 def prepare_experiment(config: dict, delete=False):
     config.seed = _set_seed()
-    config.device = _get_device()
+    config.device = get_device()
     dirpath = _setup_experiment_dirpath(config)
     config.data_paths = {"dirpath": str(dirpath)}
     config.data_paths["data"] = "data"
