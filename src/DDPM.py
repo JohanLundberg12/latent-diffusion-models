@@ -18,9 +18,12 @@ def gather(inp: torch.Tensor, t: torch.tensor):
 
 
 class Diffusion(nn.Module):
-    def __init__(self, n_steps: int, device: torch.device):
+    def __init__(self, n_steps: int, device: torch.device, n_samples: int = 1):
         super().__init__()
         self.device = device
+
+        # number of images to generate when prompted to generate
+        self.n_samples = n_samples
 
         # Create beta_1 to beta_T linearly increasing variance schedule
         self.beta = torch.linspace(0.0001, 0.02, n_steps).to(self.device)
@@ -87,6 +90,7 @@ class Diffusion(nn.Module):
 
         return mean + (var**0.5) * eps
 
+    @torch.no_grad()
     def sample(self, eps_model, classes, shape, device, cfg_scale=3):
         """Args:
         eps_model (Unet): Model to predict noise
