@@ -44,6 +44,17 @@ def image_transform(image: Image.Image, transform) -> torch.Tensor:
     return image_tensor
 
 
+def get_gray_scale_image_transform(image_size):
+    transform = transforms.Compose(
+        [
+            transforms.Resize((image_size, image_size)),
+            transforms.ToTensor(),
+            transforms.Grayscale(num_output_channels=1),
+        ]
+    )
+    return transform
+
+
 def reverse_transform(image_tensor, transform) -> Image.Image:
     """Transforms a tensor to an image and scales its pixel values to be between 0 and 255."""
 
