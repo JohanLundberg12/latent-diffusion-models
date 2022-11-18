@@ -3,7 +3,7 @@ import torchvision
 import torch
 from torch.utils.data import DataLoader, Subset
 
-from .transforms import get_image_transform
+from .transforms import ImageTransform
 
 
 class AbstractDataset(torchvision.datasets.VisionDataset):
@@ -16,7 +16,7 @@ class AbstractDataset(torchvision.datasets.VisionDataset):
         self.data_path = data_path
         self.image_size = image_size
         self.train = train
-        self.transform = get_image_transform(image_size=self.image_size)
+        self.transform = ImageTransform(image_size=self.image_size)
 
         if self.name == "MNIST":
             self.dataset = torchvision.datasets.MNIST(
