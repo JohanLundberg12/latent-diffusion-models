@@ -1,3 +1,4 @@
+# Big thanks to: https://nn.labml.ai/diffusion/stable_diffusion/model/autoencoder.html
 from typing import List
 
 import torch

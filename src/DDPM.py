@@ -1,4 +1,6 @@
-"""Diffusion process using some noise type
+"""
+Big thanks to: https://nn.labml.ai/diffusion/ddpm/index.html
+Diffusion process using some noise type
 """
 from typing import Optional, Tuple
 
