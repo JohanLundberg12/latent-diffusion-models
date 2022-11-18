@@ -6,15 +6,28 @@ from torch.utils.data import DataLoader, Subset
 from .transforms import get_image_transform
 
 
+class CIFAR10Dataset(torchvision.datasets.CIFAR10):
+    def __init__(self, config: dict, image_size: int, train: bool = True):
+        super().__init__(
+            root=config.data_paths["data"],
+            train=train,
+            download=True,
+            transform=get_image_transform(image_size=image_size),
+        )
+
+    def __getitem__(self, item: int):
+        return super().__getitem__(item)
+
+
 class CelebADataset(torchvision.datasets.CelebA):
     def __init__(self, config: dict, image_size: int, split: str) -> None:
-        transform = get_image_transform(image_size=image_size)
 
         super().__init__(
             str(config.data_paths["data"]),
             split=split,
             download=True,
-            transform=transform,
+            transform=get_image_transform(image_size=image_size),
+            target_type="attr",
         )
 
     def __getitem__(self, item):
@@ -23,13 +36,12 @@ class CelebADataset(torchvision.datasets.CelebA):
 
 class MNISTDataset(torchvision.datasets.MNIST):
     def __init__(self, config, image_size, train):
-        transform = get_image_transform(image_size=image_size)
 
         super().__init__(
             str(config.data_paths["data"]),
             train=train,
             download=True,
-            transform=transform,
+            transform=get_image_transform(image_size=image_size),
         )
 
     def __getitem__(self, item):
@@ -41,6 +53,8 @@ def _get_dataset(config: dict, name: str, image_size: int, train: bool):
 
     if name == "MNIST":
         dataset = MNISTDataset(config, image_size, train=train)
+    elif name == "CIFAR10":
+        dataset = CIFAR10Dataset(config, image_size, train=train)
     elif name == "CelebA":
         if train:
             dataset = CelebADataset(config, image_size, split="train")
@@ -62,10 +76,22 @@ def set_dataloader(dataset, batch_size):
     return DataLoader(dataset, batch_size, shuffle=True, num_workers=4, pin_memory=True)
 
 
-def _get_classes(dataset) -> list:
+# this function returns the name of the torchvision.datasets.CelebA dataset
+def get_dataset_name(config: dict) -> str:
+    """Returns the name of the dataset."""
+
+    return config.data["dataset"]
+
+
+def _get_classes(dataset, name: str) -> list:
     """Returns the classes of the dataset."""
 
-    return list(set(dataset.targets.numpy()))
+    if name == "MNIST":
+        return list(set(dataset.targets.numpy()))
+    elif name == "CelebA":
+        return torch.diag(torch.ones(40, dtype=torch.uint8)).tolist()
+    elif name == "CIFAR10":
+        return list(set(dataset.targets))
 
 
 def _split_train_val(dataset, val_split: float) -> tuple:
@@ -86,7 +112,7 @@ def get_data(config: dict, testing: bool):
     batch_size = config.batch_size
 
     trainset = _get_dataset(config, name, image_size, train=True)
-    classes = _get_classes(trainset)
+    classes = _get_classes(trainset, get_dataset_name(config))
     trainset, valset = _split_train_val(trainset, val_split=0.1)
     testset = _get_dataset(config, name, image_size, train=False)
 
