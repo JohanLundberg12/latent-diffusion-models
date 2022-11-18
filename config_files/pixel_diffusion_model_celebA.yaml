@@ -1,5 +1,5 @@
 # Train or sample from a pixel based diffusion model
-name: "pixel_diffusion_model_mnist_img32"
+name: "pixel_diffusion_model_celebA_img64"
 type: pixel
 testing: False
 diffusion:
@@ -16,7 +16,7 @@ loss_fn: mse
 model: 
   target: src.UNet.UNet
   params:
-    in_channels: 1
+    in_channels: 3
     out_channels: 1 #noise prediction
     channels: 64 #first feature map output channels
     channel_multipliers: [1, 2, 4, 8] #64, 128, 256, 512, etc.
@@ -24,5 +24,5 @@ model:
     num_classes: 10
 data:
   dataset: "MNIST"
-  image_channels: 1
-  image_size: 32 #for image rescaling
+  image_channels: 3
+  image_size: 64 #for image rescaling
