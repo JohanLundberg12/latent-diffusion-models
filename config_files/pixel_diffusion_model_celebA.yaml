@@ -23,6 +23,6 @@ model:
     with_time_emb: True
     num_classes: 10
 data:
-  dataset: "MNIST"
+  dataset: CelebA
   image_channels: 3
   image_size: 64 #for image rescaling
