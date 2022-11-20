@@ -117,6 +117,7 @@ class DiffusionModelTrainer(Trainer):
 
         return val_loss
 
+    @timeit
     def train(self):
 
         for epoch in range(self.epochs):
@@ -124,7 +125,7 @@ class DiffusionModelTrainer(Trainer):
             val_loss = round(self._val_epoch(epoch), 4)
 
             print(
-                f"Epoch {epoch + 1}/{self.epochs}, train loss: {train_loss}, val loss: {val_loss}\n"
+                f"\nEpoch {epoch + 1}/{self.epochs}, \ntrain loss: {train_loss}, \nval loss: {val_loss}\n"
             )
 
             # Log results to wandb
@@ -154,6 +155,7 @@ class DiffusionModelTrainer(Trainer):
 
         return eps_theta
 
+    @timeit
     def sample(self, classes, cfg_scale=0):
         tensor_image = self.diffusion.sample(
             self.model,
