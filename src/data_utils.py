@@ -1,52 +1,7 @@
-import numpy as np
-import torchvision
 import torch
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader
 
-from .transforms import ImageTransform
-
-
-class AbstractDataset(torchvision.datasets.VisionDataset):
-    """Abstract dataset class for all datasets which are available in torchvision.datasets."""
-
-    def __init__(self, name: str, data_path: str, image_size: int, train: bool):
-        super().__init__(root=data_path, transform=None, target_transform=None)
-
-        self.name = name
-        self.data_path = data_path
-        self.image_size = image_size
-        self.train = train
-        self.transform = ImageTransform(image_size=self.image_size)
-
-        if self.name == "MNIST":
-            self.dataset = torchvision.datasets.MNIST(
-                root=self.data_path, train=self.train, download=True
-            )
-            # get unique classes from dataset (MNIST has 10 classes)
-            # .numpy() is needed because the classes are in a torch tensor
-            self.classes = list(np.unique(self.dataset.targets.numpy()))
-        elif self.name == "CIFAR10":
-            self.dataset = torchvision.datasets.CIFAR10(
-                root=self.data_path, train=self.train, download=True
-            )
-            # get unique classes from dataset (CIFAR10 has 10 classes)
-            # no .numpy() needed because the classes are in a numpy array
-            self.classes = list(np.unique(self.dataset.targets))
-        else:
-            raise NotImplementedError(
-                f"Dataset {self.name} is not implemented. Please choose from MNIST or CIFAR10"
-            )
-
-    def __getitem__(self, index):
-        image, target = self.dataset[index]
-
-        if self.transform is not None:
-            image = self.transform(image)
-
-        return image, target
-
-    def __len__(self):
-        return len(self.dataset)
+from .AbstractDataset import AbstractDataset
 
 
 def set_dataloader(dataset, batch_size):
@@ -67,30 +22,35 @@ def _split_train_val(dataset, val_split: float) -> tuple:
     return torch.utils.data.random_split(dataset, [train_size, val_size])
 
 
-def get_data(config: dict, testing: bool):
-    """Creates train and val data loader and return also the classes and number
-    of classes.
-    """
+# create data loaders
+def create_dataloaders(config: dict) -> tuple:
+    """Creates the train, validation and test dataloaders."""
+    # either return the train, validation and test dataloaders or
+    # train and test dataloaders if validation is not required.
+
     name = config.data["dataset"]
     image_size = config.data["image_size"]
-    data_path = config.data_paths["data"]
-
-    trainset = AbstractDataset(name, data_path, image_size, train=True)
-    testset = AbstractDataset(name, data_path, image_size, train=False)
-    classes = trainset.classes
-    num_classes = len(classes)
-
-    trainset, valset = _split_train_val(trainset, val_split=0.1)
-
-    if testing:
-        indices = np.arange(0, 20)
-        trainset = Subset(trainset, indices)
-        valset = Subset(valset, indices)
-        testset = Subset(testset, indices)
-
     batch_size = config.batch_size
-    train_loader = set_dataloader(trainset, batch_size)
-    val_loader = set_dataloader(valset, batch_size)
+    debugging = config.debugging
+
+    dataset = AbstractDataset(
+        name, data_path="data", image_size=image_size, train=True, debugging=debugging
+    )
+    classes = dataset.classes
+
+    testset = AbstractDataset(
+        name, data_path="data", image_size=image_size, train=False, debugging=debugging
+    )
     test_loader = set_dataloader(testset, batch_size)
 
-    return train_loader, val_loader, test_loader, classes, num_classes
+    if config["data"]["val_split"] > 0:
+        val_split = config["data"]["val_split"]
+        trainset, valset = _split_train_val(dataset, val_split=val_split)
+        train_loader = set_dataloader(trainset, batch_size)
+        val_loader = set_dataloader(valset, batch_size)
+
+        return train_loader, val_loader, test_loader, classes
+    else:
+        train_loader = set_dataloader(dataset, batch_size)
+
+        return train_loader, test_loader, classes
