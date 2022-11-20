@@ -362,7 +362,7 @@ class UNet(nn.Module):
         self,
         x_noisy: torch.Tensor,
         t: torch.Tensor,
-        y: torch.Tensor,
+        y: torch.Tensor = None,
     ) -> torch.Tensor:
         """
         Args:
