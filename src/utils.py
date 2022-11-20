@@ -1,14 +1,16 @@
+from typing import Callable
+from time import perf_counter
 import errno
 import importlib
 import pathlib
 from pathlib import Path
-from typing import Callable
 from tqdm import tqdm
 
 import torch
-import torch.nn.functional as f
+import random
+import numpy as np
 
-from .data_utils import get_data
+from torchvision.utils import save_image
 
 
 def create_folder(path: pathlib.PosixPath) -> None:
@@ -35,96 +37,55 @@ def load_model(model: torch.nn.Module, state_dict_path: str) -> torch.nn.Module:
     """Loads a model from a state dict path"""
 
     # load model weights
-    weights = torch.load(state_dict_path)
+    state_dict = torch.load(state_dict_path)
 
     # load weights into model
-    model.load_state_dict(weights)
+    model.load_state_dict(state_dict)
 
     return model
 
 
-# reconstruction_term: how to tune?
-def elbo_loss_fn(data, outputs, mu, log_var, reconstruction_term=1):
-    # reconstruction loss: element-wise mean squared error
-    r_loss = f.mse_loss(
-        input=outputs, target=data, reduction="mean"
-    )  # sum or mean reduction (not important right now)?
+def get_obj_from_str(string: str, reload=False) -> object:
+    """Returns an object from a string"""
+    # get_obj_from_str example:
+    # string = "torch.nn.Conv2d"
+    # module = torch.nn
+    # cls = Conv2d
 
-    # Kullback Leibler Divergence loss
-    # Ensures mu and sigma values never stray too far from a standard normal
-    kl_loss = -0.5 * torch.sum(1 + log_var - mu**2 - torch.exp(log_var))
-
-    # Evidence Lower Bound loss
-    elbo_loss = reconstruction_term * r_loss + kl_loss
-
-    return elbo_loss
-
-
-def _get_loss_fn(loss_fn) -> Callable:
-    """Returns a loss function"""
-
-    if loss_fn == "mse":
-        return f.mse_loss
-    elif loss_fn == "elbo":
-        return elbo_loss_fn
-    elif loss_fn == "cross-entropy":
-        return f.cross_entropy
-    else:
-        raise NameError
-
-
-def make_settings(config):
-    """Creates a settings dict from a config dict
-    Args:
-        config (dict): yaml configurations
-    Returns:
-        dict: Containing dataloaders, classes, loss_fn,
-        scaler: GradScaler for mixed precision training
-    """
-    # Load data
-    train_loader, val_loader, test_loader, classes, num_classes = get_data(
-        config, testing=config.testing
-    )
-    # Update config
-    config.classes = classes
-    config.num_classes = num_classes
-
-    # get loss fn (criterion)
-    loss_fn = _get_loss_fn(config.loss_fn)
-
-    # instances of GradScaler() help perform steps of the gradient scaling
-    # conveniently. Improves convergence for networks with
-    # float16 (Conv layers) gradients by minimizing gradient underflow
-    scaler = torch.cuda.amp.GradScaler()
-
-    return (train_loader, val_loader, test_loader, classes, loss_fn, scaler)
-
-
-def get_obj_from_str(string: str, reload=False):
-    """This function takes a string and returns the object
-    Args:
-        string (_type_): path to the object
-        reload (bool, optional): Whether to reload module. Defaults to False.
-    Returns:
-        object: The object
-    """
     # Split string into module and class
-    module, cls = string.rsplit(".", 1)
+    module_name, cls_name = string.rsplit(".", 1)
 
     # Import module
-    if reload:
-        module_imp = importlib.import_module(module)
-        importlib.reload(module_imp)
+    module = importlib.import_module(module_name)
 
-    # Get class
-    return getattr(importlib.import_module(module, package=None), cls)
+    # reload module if True
+    if reload:
+        importlib.reload(module)
+
+    cls = getattr(module, cls_name)
+
+    return cls
 
 
 def instantiate_from_config(config: dict) -> torch.nn.Module:
     """Instantiates a class from a config dict"""
+    # instantiate_from_config example:
+    # config = {
+    #     "target": "torch.nn.Conv2d",
+    #     "params": {
+    #         "in_channels": 3,
+    #         "out_channels": 64,
+    #         "kernel_size": 3,
+    #         "stride": 1,
+    #         "padding": 1,
+    #     },
+    # }
 
-    # Get class
-    return get_obj_from_str(config["target"])(**config.get("params", dict()))
+    cls = get_obj_from_str(config["target"])
+
+    params = config["params"]
+
+    return cls(**params)
 
 
 # state_dict_path example: 'load/from/path/model.pth'
@@ -135,9 +96,56 @@ def get_model_from_config(config, state_dict_path: str = None) -> torch.nn.Modul
     model = instantiate_from_config(config)
 
     # Load state dict if path provided
-    if state_dict_path:
+    if state_dict_path is not None:
         print(f"Loading model from {state_dict_path}")
 
         model = load_model(model, state_dict_path)
 
     return model
+
+
+def timeit(method: Callable) -> Callable:
+    """Decorator to time a function"""
+
+    def timed(*args, **kw):
+        """Returns the time taken to execute a function"""
+        ts = perf_counter()
+        result = method(*args, **kw)
+        te = perf_counter()
+        print(f"{method.__name__}: {te - ts} sec")
+        return result
+
+    return timed
+
+
+def save_images(imgs: torch.Tensor, name: str, ext: str = ".png"):
+    """Saves each image in the tensor to name
+
+    Args:
+        imgs (torch.Tensor): (batches, channels, H, W)
+        name (str): filename
+        ext (str, optional): extension of images. Defaults to ".png".
+    """
+    for i in range(imgs.size(0)):
+        save_image(imgs[i, :, :, :], "./{}_{}{}".format(name, i, ext))
+
+
+def get_device():
+    """Returns the device to be used for training."""
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
+    print(f"Using {device} as backend")
+
+    return device
+
+
+def set_seed(seed: int = 42):
+    """Sets the seed for the experiment."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+    return seed
