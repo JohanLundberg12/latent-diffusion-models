@@ -5,19 +5,6 @@ from torchvision import transforms
 from torchvision.transforms import Lambda
 
 
-class ImageTransform:
-    def __init__(self, image_size):
-        self.image_size = image_size
-        self.transform = get_image_transform(self.image_size)
-        self.reverse_transform = get_reverse_image_transform()
-
-    def __call__(self, image):
-        return image_transform(image, self.transform)
-
-    def reverse(self, image_tensor):
-        return reverse_transform(image_tensor, self.reverse_transform)
-
-
 def get_image_transform(image_size):
     """Returns a transform that scales the image pixel values to [-1, 1]"""
 
