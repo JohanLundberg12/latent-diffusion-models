@@ -1,176 +1,122 @@
-from time import time
-
 import torch
 from sklearn.metrics import f1_score
 
-import wandb
-from src.EarlyStopping import EarlyStopping
-from src.ResNetClassifier import ResNetBase
-from src.utils import progress_bar
+from .Trainer import Trainer
+from .utils import progress_bar, timeit
 
 
-class ResNetTrainer:
-    def __init__(
-        self,
-        config: dict,
-        model: ResNetBase,
-        train_loader,
-        val_loader,
-        loss_fn,
-        optimizer,
-        scaler,
-        classes,
-        device,
-        epochs,
-    ) -> None:
-        self.config = config
-        self.model = model.to(device)
-        self.train_loader = train_loader
-        self.val_loader = val_loader
-        self.loss_fn = loss_fn
-        self.optimizer = optimizer
-        self.scaler = scaler
-        self.classes = classes
-        self.epochs = epochs
-        self.device = device
-        self.early_stopping = EarlyStopping(
-            patience=10,
-            verbose=True,
-            path=self.config.data_paths["checkpoints"] + "/checkpoint.pt",
-        )
+class ResNetTrainer(Trainer):
+    def __init__(self, config, model, train_loader, val_loader, classes):
+        super().__init__(config, model, train_loader, val_loader, classes)
 
-    def train_step(self, epoch):
+        self.model.to(self.device)
+
+    @timeit
+    def _train_epoch(self, epoch):
         self.model.train()
 
         train_loss = 0.0
-
         train_f1 = list()
 
-        start_time = time()
+        pbar = progress_bar(
+            self.train_loader, desc=f"Train, Epoch {epoch + 1}/{self.epochs}"
+        )
 
-        pbar = progress_bar(self.train_loader, desc="train step")
-
-        for _, (data, targets) in pbar:
-            # prepare data
+        for i, (data, targets) in pbar:
             data, targets = data.to(self.device), targets.to(self.device)
-            prepare_time = start_time - time()
 
             # Autocasting automatically chooses the precision (floating point data type)
             # for GPU operations to improve performance while maintaining accuracy.
-            with torch.cuda.amp.autocast():
+            with torch.cuda.amp.autocast(enabled=self.config["use_amp"]):
                 outputs = self.model(data)
 
                 loss = self.loss_fn(outputs, targets)
 
+            # zero the parameter gradients of the optimizer
+            # Make the gradients zero to avoid the gradient being a
+            # combination of the old gradient and the next
             # Updates gradients by write rather than read and write (+=) used
             # https://www.youtube.com/watch?v=9mS1fIYj1So
             self.optimizer.zero_grad(set_to_none=True)
 
-            # The network loss is scaled by a scaling factor to prevent underflow.
-            # Gradients flowing back through the network are scaled by the same factor.
-            # Calls .backward() on scaled loss to create scaled gradients.
-            self.scaler.scale(loss).backward()
+            if self.scaler is not None:
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+            else:
+                loss.backward()
+                self.optimizer.step()
 
-            # Scaler.step() first unscales the gradients of the optimizer's
-            # assigned params by dividing them by the scale factor.
-            # If the gradients do not contain NaNs/inf, optimizer.step() is called,
-            # otherwise skipped.
-            # optimizer.step() is then called using the unscaled gradients.
-            self.scaler.step(self.optimizer)
-
-            # Updates the scale factor
-            self.scaler.update()
-
-            # Add total batch loss to total loss
-            batch_loss = loss.item() * data.size(0)  # not sure about data.size(0)
-            train_loss += batch_loss
+            # update train loss and multiply by
+            # data.size(0) to get the sum of the batch loss
+            train_loss += loss.item() * data.size(0)
 
             y_preds = outputs.argmax(-1).cpu().numpy()
             y_target = targets.cpu().numpy()
-            batch_f1 = f1_score(y_target, y_preds, labels=self.classes, average="micro")
+            batch_f1 = f1_score(y_target, y_preds, average="micro")
             train_f1.append(batch_f1)
 
-            # Update info in progress bar
-            process_time = start_time - time() - prepare_time
-            compute_efficency = process_time / (process_time + prepare_time)
-            pbar.set_description(
-                "Train step, "
-                f"compute efficiency: {compute_efficency:.2f}, "
-                f"batch loss: {batch_loss:.4f}, "
-                f"train loss: {train_loss:.4f}, "
-                f"batch f1: {batch_f1:.4f}, "
+            # update info in progress bar
+            pbar = progress_bar(
+                self.train_loader,
+                desc=f"Train, Epoch {epoch + 1}/{self.epochs}, train loss: {train_loss:.4f}",
             )
-            start_time = time()
 
-        # Calculate average loss and avg f1 for this epoch
-        train_loss /= len(self.train_loader)
+        # calculate average losses
+        train_loss = train_loss / len(self.train_loader)
         avg_train_f1 = sum(train_f1) / len(train_f1)
 
         return train_loss, avg_train_f1
 
     # .inference_mode() should be faster than .no_grad()
     # but you can't use .requires_grad() in that context
+    @timeit
     @torch.inference_mode()
-    def val_step(self, epoch):
+    def _val_epoch(self, epoch):
         self.model.eval()
 
-        valid_loss: float = 0.0
-
-        valid_f1 = list()
-
-        start_time = time()
-
-        pbar = progress_bar(self.val_loader, desc="val step")
+        val_loss = 0.0
+        val_f1 = list()
+        pbar = progress_bar(
+            self.val_loader, desc=f"Val, Epoch {epoch + 1}/{self.epochs}"
+        )
 
         for _, (data, targets) in pbar:
             data, targets = data.to(self.device), targets.to(self.device)
-            prepare_time = start_time - time()
 
             outputs = self.model(data)
 
-            # Calc. loss
             loss = self.loss_fn(outputs, targets)
 
-            # * data.size(0) to get total loss for the batch and not the avg.
-            batch_loss = loss.item() * data.size(0)
-            valid_loss += batch_loss
+            val_loss += loss.item() * data.size(0)
 
             y_preds = outputs.argmax(-1).cpu().numpy()
             y_target = targets.cpu().numpy()
             batch_f1 = f1_score(y_target, y_preds, labels=self.classes, average="micro")
-            valid_f1.append(batch_f1)
+            val_f1.append(batch_f1)
 
             # Update info in progress bar
-            process_time = start_time - time() - prepare_time
-            compute_efficency = process_time / (process_time + prepare_time)
             pbar.set_description(
-                "Val step, "
-                f"compute efficiency: {compute_efficency:.2f}, "
-                f"batch loss: {batch_loss:.4f}, "
-                f"valid loss: {valid_loss:.4f}, "
-                f"batch f1: {batch_f1:.4f}, "
+                f"Val, Epoch {epoch + 1}/{self.epochs}, val loss: {val_loss:.4f}"
             )
-            start_time = time()
 
         # Calculate average loss and avg f1 for this epoch
-        valid_loss /= len(self.val_loader)
-        avg_valid_f1 = sum(valid_f1) / len(valid_f1)
+        val_loss /= len(self.val_loader)
+        avg_valid_f1 = sum(val_f1) / len(val_f1)
 
-        return valid_loss, avg_valid_f1
+        return val_loss, avg_valid_f1
 
+    @timeit
     def pretrain(self, dataloader):
         self.model.train()
 
         pretrain_loss: float = 0.0
         pretrain_f1 = list()
 
-        start_time = time()
-
         pbar = progress_bar(dataloader, desc="pretrain step")
 
         for _, (data, targets) in pbar:
             data, targets = data.to(self.device), targets.to(self.device)
-            prepare_time = start_time - time()
 
             with torch.cuda.amp.autocast():
                 outputs = self.model(data)
@@ -178,31 +124,22 @@ class ResNetTrainer:
 
             self.optimizer.zero_grad(set_to_none=True)
 
-            self.scaler.scale(loss).backward()
+            if self.scaler is not None:
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+            else:
+                loss.backward()
+                self.optimizer.step()
 
-            self.scaler.step(self.optimizer)
-
-            self.scaler.update()
-
-            # Add total batch loss to total loss
-            batch_loss = loss.item() * data.size(0)  # not sure about data.size(0)
-            pretrain_loss += batch_loss
+            pretrain_loss += loss.item() * data.size(0)
 
             y_preds = outputs.argmax(-1).cpu().numpy()
             y_target = targets.cpu().numpy()
             batch_f1 = f1_score(y_target, y_preds, labels=self.classes, average="micro")
             pretrain_f1.append(batch_f1)
 
-            process_time = start_time - time() - prepare_time
-            compute_efficency = process_time / (process_time + prepare_time)
-            pbar.set_description(
-                "Pretrain step, "
-                f"compute efficiency: {compute_efficency:.2f}, "
-                f"batch loss: {batch_loss:.4f}, "
-                f"train loss: {pretrain_loss:.4f}, "
-                f"batch f1: {batch_f1:.4f}, "
-            )
-            start_time = time()
+            pbar.set_description(f"pretrain step, pretrain loss: {pretrain_loss:.4f}")
 
         # Calculate average loss and avg f1 for this epoch
         pretrain_loss /= len(self.train_loader)
@@ -210,6 +147,7 @@ class ResNetTrainer:
 
         return pretrain_loss, avg_pretrain_f1
 
+    @timeit
     def train(self):
         """
         ### Training loop
@@ -221,19 +159,16 @@ class ResNetTrainer:
             "valid_f1": list(),
         }
 
-        for epoch in range(1, self.epochs + 1):
-            start = time()
-            train_loss, train_f1 = [round(x, 4) for x in self.train_step(epoch)]
-            valid_loss, valid_f1 = [round(x, 4) for x in self.val_step(epoch)]
-            stop = time()
+        for epoch in range(self.epochs):
+            train_loss, train_f1 = [round(x, 4) for x in self._train_epoch(epoch)]
+            valid_loss, valid_f1 = [round(x, 4) for x in self._val_epoch(epoch)]
 
             print(
-                f"\nEpoch: {epoch+1}",
-                f"\navg train-loss: {train_loss}",
-                f"\navg val-loss: {valid_loss}",
-                f"\navg train-f1: {train_f1}",
-                f"\navg valid-f1: {valid_f1}",
-                f"\ntime: {stop-start:.4f}\n",
+                f"\nEpoch {epoch + 1}/{self.epochs}",
+                f"\ntrain loss: {train_loss:.4f}",
+                f"\ntrain f1: {train_f1:.4f}",
+                f"\nvalid loss: {valid_loss:.4f}",
+                f"\nvalid f1: {valid_f1:.4f}",
             )
 
             # Save losses
@@ -242,14 +177,9 @@ class ResNetTrainer:
             results["train_f1"].append(train_f1)
             results["valid_f1"].append(valid_f1)
 
-            # Log results to wandb
-            wandb.log({"train_loss": train_loss, "epoch": epoch})
-            wandb.log({"valid_loss": valid_loss, "epoch": epoch})
-            wandb.log({"train_f1": train_f1, "epoch": epoch})
-            wandb.log({"valid_f1": valid_f1, "epoch": epoch})
+            self._log_metrics(metrics={**results}, step=epoch, mode="train")
 
             self.early_stopping(val_loss=valid_loss, model=self.model)
-
             if self.early_stopping.early_stop:
                 print("Early stopping")
                 break
@@ -267,13 +197,12 @@ class ResNetTrainer:
             f"\navg train-f1: {avg_train_f1}",
             f"\navg valid-f1: {avg_valid_f1}",
         )
-
-        wandb.log({"train_time": stop - start})
         print("Training done.")
 
+    @timeit
     @torch.inference_mode()
     def predict(self, test_loader):
-        print("Predicting on test set...")
+        print("\nPredicting on test set...")
 
         self.model.eval()
         f1_scores = []
