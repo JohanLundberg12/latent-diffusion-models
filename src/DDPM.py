@@ -82,15 +82,18 @@ class Diffusion(nn.Module):
         # finding mu
         mean = 1 / (alpha**0.5) * (xt - eps_coef * eps_theta)
 
-        # sigma^2
-        var = gather(self.sigma2, t)
+        if t[0].item() == 0:
+            return mean
+        else:
+            # sigma^2
+            var = gather(self.sigma2, t)
 
-        # sample epsilon (noise)
-        eps = torch.randn(xt.shape, device=xt.device)
+            # sample epsilon (noise)
+            eps = torch.randn(xt.shape, device=xt.device)
 
-        # finally return prediction of x_{t-1}
+            # finally return prediction of x_{t-1}
 
-        return mean + (var**0.5) * eps
+            return mean + (var**0.5) * eps
 
     @torch.no_grad()
     def sample(self, eps_model, classes, shape, device, cfg_scale=3):
