@@ -1,235 +1,181 @@
-from typing import Callable, Union
-from time import time
+import torch
 import numpy as np
 
-import torch
-import torch.utils.data
-import torch.optim as optim
-from torch.utils.data import DataLoader
+from .utils import progress_bar, timeit
 
-import wandb
+from .Trainer import Trainer
 
-from .DDPM import Diffusion
-from .UNet import UNet
-from .LatentDiffusionModel import LatentDiffusionModel
-from .EarlyStopping import EarlyStopping
-
-from src.transforms import (
+from .transforms import (
     get_reverse_image_transform,
     reverse_transform,
 )
-from .utils import progress_bar
 
 
-# ddpm and autoencoder
-class DiffusionModelTrainer:
+class DiffusionModelTrainer(Trainer):
     def __init__(
-        self,
-        config: dict,
-        diffusion_model: Diffusion,
-        eps_model: Union[UNet, LatentDiffusionModel],
-        train_loader: DataLoader,
-        val_loader: DataLoader,
-        cfg_scale: int,  # classifier free guidance scale
-        loss_fn: Callable,
-        optimizer: optim.Optimizer,
-        scaler: torch.cuda.amp.grad_scaler,
-        classes: list(),
-        device: str,
-        epochs: int,
-    ) -> None:
-        self.config = config
-        self.device = device
-        self.epochs = epochs
-        self.classes = classes
+        self, config, model, train_loader, val_loader, classes, diffusion, cfg_scale
+    ):
+        super().__init__(config, model, train_loader, val_loader, classes)
 
-        self.diffusion_model = diffusion_model.to(self.device)
-        self.eps_model = eps_model.to(self.device)
+        self.diffusion = diffusion
+        self.cfg_scale = cfg_scale
 
-        self.train_loader = train_loader
-        self.val_loader = val_loader
-
-        self.cfg_scale = cfg_scale  # classifier free guidance
+        # put model and diffusion on device
+        self.to(self.device)
         self.classes = torch.tensor(self.classes).to(self.device)
 
-        self.loss_fn = loss_fn
-        self.optimizer = optimizer
-        self.scaler = scaler
-        self.early_stopping = EarlyStopping(
-            patience=10,
-            verbose=True,
-            path=self.config.data_paths["checkpoints"] + "/checkpoint.pt",
+    @timeit
+    def _train_epoch(self, epoch):
+        self.model.train()
+
+        train_loss = 0.0
+        pbar = progress_bar(
+            self.train_loader, desc=f"Train, Epoch {epoch + 1}/{self.epochs}"
         )
 
-    def train_step(self):
-        """
-        ### Train
-        """
-        self.eps_model.train()
-
-        train_loss: float = 0.0
-
-        pbar = progress_bar(self.train_loader, desc="train step")
-
-        start_time = time()
-
-        for _, (data, targets) in pbar:
+        for i, (data, targets) in pbar:
             data, targets = data.to(self.device), targets.to(self.device)
-            prepare_time = start_time - time()
 
-            with torch.cuda.amp.autocast():
+            # forward + backward + optimize
+            with torch.cuda.amp.autocast(enabled=self.config["use_amp"]):
+                noise, xt, t = self.diffusion(data)
 
-                # if latent noise predictor model
-                if isinstance(self.eps_model, LatentDiffusionModel):
-
-                    # encode image
-                    z = self.eps_model.autoencoder_encode(data)
-
-                    # latent diffusion model forward pass: add noise to encoding
-                    noise, xt, t = self.diffusion_model(z)
-                else:
-                    # pixel diffusion model forward pass
-                    noise, xt, t = self.diffusion_model(data)
-
-                # perc. of time we do no guidance
+                # % of the time we don't use labels (no guidance)
                 if np.random.random() < 0.1:
                     targets = None
+                eps_theta = self.forward(xt, t, targets)
 
-                # model pred of noise
-                eps_theta = self.eps_model(xt, t, targets)
-
-                # calculate loss
                 loss = self.loss_fn(noise, eps_theta)
 
+            # zero the parameter gradients of the optimizer
             # Make the gradients zero to avoid the gradient being a
             # combination of the old gradient and the next
             # Updates gradients by write rather than read and write (+=) used
             # https://www.youtube.com/watch?v=9mS1fIYj1So
             self.optimizer.zero_grad(set_to_none=True)
 
-            # Scale gradients
-            self.scaler.scale(loss).backward()
+            if self.scaler is not None:
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+            else:
+                loss.backward()
+                self.optimizer.step()
 
-            # Update optimizer
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
+            # update train loss and multiply by
+            # data.size(0) to get the sum of the batch loss
+            train_loss += loss.item() * data.size(0)
 
-            # Add total batch loss to total loss
-            batch_loss = loss.item() * data.size(0)
-            train_loss += batch_loss
-
-            # Update info in progress bar
-            process_time = start_time - time() - prepare_time
-            compute_efficency = process_time / (process_time + prepare_time)
+            # update info in progress bar
             pbar.set_description(
-                f"Compute efficiency: {compute_efficency:.2f}, "
-                f"batch loss: {batch_loss:.4f}, "
-                f"train loss: {train_loss:.4f}"
+                f"Train, Epoch {epoch + 1}/{self.epochs}, train loss: {train_loss:.4f}"
             )
-            start_time = time()
 
-        # Calculate average loss
-        train_loss /= len(self.train_loader)
+        # calculate average losses
+        train_loss = train_loss / len(self.train_loader)
 
         return train_loss
 
-    def eval_step(self):
+    @timeit
+    @torch.inference_mode()
+    def _val_epoch(self, epoch):
+        self.model.eval()
 
-        self.eps_model.eval()
+        val_loss = 0.0
+        pbar = progress_bar(
+            self.val_loader, desc=f"Val, Epoch {epoch + 1}/{self.epochs}"
+        )
 
-        valid_loss: float = 0.0
+        for i, (data, targets) in pbar:
+            data, targets = data.to(self.device), targets.to(self.device)
 
-        pbar = progress_bar(self.val_loader, desc="val step")
-
-        # .inference_mode() should be faster than .no_grad()
-        # but you can't use .requires_grad() in that context
-        with torch.inference_mode():
-            for _, (data, targets) in pbar:
-                data, targets = data.to(self.device), targets.to(self.device)
-                if isinstance(self.eps_model, LatentDiffusionModel):
-                    # encode image
-                    z = self.eps_model.autoencoder_encode(data)
-
-                    # latent diffusion model forward pass: add noise to encoding
-                    noise, xt, t = self.diffusion_model(z)
-                else:
-                    # diffusion model forward pass
-                    noise, xt, t = self.diffusion_model(data)
+            # forward + backward + optimize
+            with torch.cuda.amp.autocast(enabled=self.config["use_amp"]):
+                noise, xt, t = self.diffusion(data)
 
                 # model pred of noise with cfg
-                eps_theta = self.eps_model(xt, t, targets)
+                eps_theta = self.forward(xt, t, targets)
 
                 if self.cfg_scale > 0:
                     # eps_model pred without cfg
-                    eps_theta_uncond = self.eps_model(xt, t, None)
+                    eps_theta_uncond = self.forward(xt, t, None)
 
                     # linear interpolation between the two
                     eps_theta = torch.lerp(eps_theta_uncond, eps_theta, self.cfg_scale)
 
-                # Calc. and acc. loss
                 loss = self.loss_fn(noise, eps_theta)
-                valid_loss += loss.item() * data.size(
-                    0
-                )  # * data.size(0) to get total loss for the batch and not the avg.
 
-            # Calculate average loss
-            valid_loss /= len(self.val_loader)
+            # update val loss
+            val_loss += loss.item() * data.size(0)
 
-        return valid_loss
-
-    def train(self):
-        """
-        ### Training loop
-        """
-        results = {"train_losses": list(), "valid_losses": list()}
-
-        for epoch in range(1, self.epochs + 1):
-            start = time()
-            train_loss = round(self.train_step(), 4)
-            valid_loss = round(self.eval_step(), 4)
-            stop = time()
-
-            print(
-                f"\nEpoch: {epoch}",
-                f"\navg train-loss: {train_loss}",
-                f"\navg val-loss: {valid_loss}",
-                f"\ntime: {stop-start:.4f}\n",
+            pbar.set_description(
+                f"Val, Epoch {epoch + 1}/{self.epochs}, val loss: {val_loss:.4f}"
             )
 
-            # Save losses
-            results["train_losses"].append(train_loss),
-            results["valid_losses"].append(valid_loss)
+        # calculate average losses
+        val_loss = val_loss / len(self.val_loader)
+
+        return val_loss
+
+    def train(self):
+
+        for epoch in range(self.epochs):
+            train_loss = round(self._train_epoch(epoch), 4)
+            val_loss = round(self._val_epoch(epoch), 4)
+
+            print(
+                f"Epoch {epoch + 1}/{self.epochs}, train loss: {train_loss}, val loss: {val_loss}\n"
+            )
 
             # Log results to wandb
-            wandb.log({"train_loss": train_loss, "epoch": epoch}, step=epoch)
-            wandb.log({"val_loss": valid_loss, "epoch": epoch}, step=epoch)
+            self._log_metrics(
+                metrics={"train_loss": train_loss}, step=epoch, mode="train"
+            )
+            self._log_metrics(metrics={"val_loss": val_loss}, step=epoch, mode="val")
 
             if epoch % 2 == 0:
-                tensor_image = self.diffusion_model.sample(
-                    self.eps_model,
-                    self.classes,
-                    shape=(
-                        len(self.classes),
-                        self.config.data["image_channels"],
-                        self.config.data["image_size"],
-                        self.config.data["image_size"],
-                    ),
-                    device=self.device,
-                    cfg_scale=self.cfg_scale,
-                )
-                transform = get_reverse_image_transform()
-                images = [
-                    reverse_transform(image, transform=transform)
-                    for image in tensor_image
-                ]
+                images = self.sample(self.classes, cfg_scale=self.cfg_scale)
+                self._log_images(images, step=epoch, mode="sample")
+                print("Sampled images logged to wandb\n")
 
-                wandb.log(
-                    {"images": [wandb.Image(image) for image in images]},
-                    step=epoch,
-                )
-
-            self.early_stopping(val_loss=valid_loss, model=self.eps_model)
-
+            # early stopping
+            self.early_stopping(val_loss, self.model)
             if self.early_stopping.early_stop:
                 print("Early stopping")
                 break
+
+    def forward(self, x, t, targets=None):
+        if targets is None:
+            # if no targets, we don't use cfg
+            eps_theta = self.model(x, t)
+        else:
+            # if targets, we use cfg
+            eps_theta = self.model(x, t, targets)
+
+        return eps_theta
+
+    def sample(self, classes, cfg_scale=0):
+        tensor_image = self.diffusion.sample(
+            self.model,
+            classes,
+            shape=(
+                len(classes),
+                self.config.data["image_channels"],
+                self.config.data["image_size"],
+                self.config.data["image_size"],
+            ),
+            device=self.device,
+            cfg_scale=cfg_scale,
+        )
+        transform = get_reverse_image_transform()
+        images = [
+            reverse_transform(image, transform=transform) for image in tensor_image
+        ]
+
+        return images
+
+    def to(self, device):
+        self.device = device
+        self.model.to(device)
+        self.diffusion.to(device)
+        return self
