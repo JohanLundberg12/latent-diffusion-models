@@ -1,17 +1,20 @@
 # Train or sample from a pixel based diffusion model
 name: pixel_diffusion_model_mnist_img32
+entity: itu-gen
 type: pixel
-testing: False
+debugging: True
 diffusion:
   type: pixel
   target: src.DDPM.Diffusion
+  cfg_scale: 3
   params:
     n_steps: 400 # T (100-400)
     n_samples: 100 #number of generated examples after training
     device: cuda
 batch_size: 64
-epochs: 50
-learning_rate: 0.0005
+epochs: 100
+lr: 0.0005
+use_amp: True
 loss_fn: mse
 model: 
   target: src.UNet.UNet
@@ -26,3 +29,4 @@ data:
   dataset: MNIST
   image_channels: 1
   image_size: 32 #for image rescaling
+  val_split: 0

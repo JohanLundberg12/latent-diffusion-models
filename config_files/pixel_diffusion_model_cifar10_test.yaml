@@ -2,7 +2,7 @@
 project_name: "pixel_diffusion_model_celebA_img64"
 entity: itu-gen
 type: pixel
-debugging: False
+debugging: True
 diffusion:
   type: pixel
   target: src.DDPM.Diffusion
@@ -12,10 +12,11 @@ diffusion:
     n_samples: 100 #number of generated examples after training
     device: cuda
 batch_size: 64
-epochs: 100
+epochs: 5
 lr: 0.0005
 use_amp: True
 loss_fn: mse
+early_stopping_patience: 10
 model: 
   target: src.UNet.UNet
   params:
