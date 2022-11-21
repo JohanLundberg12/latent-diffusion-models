@@ -54,16 +54,20 @@ def main(config: dict):
     wandb.define_metric("valid_f1", summary="max")
 
     if config.pretrain:
-        pretrain_loss, pretrain_f1 = trainer.pretrain(synthetic_dataloader)
+        pretrain_loss, pretrain_f1 = trainer.run(
+            mode="pretrain", data_loader=synthetic_dataloader, step="pretrain step"
+        )
 
         wandb.log({"pretrain_loss": pretrain_loss, "pretrain_f1": pretrain_f1})
 
     trainer.train()
 
-    scores, avg_f1 = trainer.predict(test_loader)
+    f1_scores, avg_f1 = trainer.run(
+        mode="test", data_loader=test_loader, step="test step"
+    )
 
     wandb.log({"avg_test_f1": avg_f1})
-    wandb.log({"test_scores": scores})
+    wandb.log({"test_scores": f1_scores})
 
 
 if __name__ == "__main__":

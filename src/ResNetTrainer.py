@@ -69,12 +69,15 @@ class ResNetTrainer(Trainer):
         print("Training done.")
 
     @timeit
-    def run(self, mode, dataloader, step):
-        if mode == "train":
+    def run(self, mode, dataloader, step, metrics=None):
+        if mode == "train" or mode == "pretrain":
             self.model.train()
 
-        elif mode == "val":
+        elif mode == "val" or mode == "test":
             self.model.eval()
+
+        else:
+            raise ValueError(f"mode {mode} not supported")
 
         total_loss = 0.0
         f1 = list()
@@ -84,7 +87,7 @@ class ResNetTrainer(Trainer):
         for _, (data, targets) in pbar:
             data, targets = data.to(self.device), targets.to(self.device)
 
-            if mode == "train":
+            if mode == "train" or mode == "pretrain":
                 # Autocasting automatically chooses the precision (floating point data type)
                 # for GPU operations to improve performance while maintaining accuracy.
                 with torch.cuda.amp.autocast(enabled=self.config["use_amp"]):
@@ -107,27 +110,45 @@ class ResNetTrainer(Trainer):
                     self.optimizer.step()
 
             elif mode == "val":
+                # The scaler is not necessary during evaluation,
+                # as you won’t call backward in this step and
+                # thus there are not gradients to scale.
+                with torch.cuda.amp.autocast(enabled=self.config["use_amp"]):
+                    # .inference_mode() should be faster than .no_grad()
+                    # but you can't use .requires_grad() in that context
+                    with torch.inference_mode():
+                        outputs = self.model(data)
+                        loss = self.loss_fn(outputs, targets)
 
-                # .inference_mode() should be faster than .no_grad()
-                # but you can't use .requires_grad() in that context
-                with torch.inference_mode():
-                    outputs = self.model(data)
-                    loss = self.loss_fn(outputs, targets)
+            elif mode == "test":
+                with torch.cuda.amp.autocast(enabled=self.config["use_amp"]):
+                    with torch.inference_mode():
+                        outputs = self.model(data)
 
-            # update train loss and multiply by
-            # data.size(0) to get the sum of the batch loss
-            total_loss += loss.item() * data.size(0)
-
-            y_preds = outputs.argmax(-1).cpu().numpy()
-            y_target = targets.cpu().numpy()
-            batch_f1 = f1_score(y_target, y_preds, labels=self.classes, average="micro")
+            batch_f1 = f1_score(
+                targets.cpu().numpy(),
+                outputs.argmax(-1).cpu().numpy(),
+                average="micro",
+            )
             f1.append(batch_f1)
 
-            pbar.set_description(
-                f"{mode}, Epoch {step + 1}/{self.epochs}, {mode} loss: {loss.item():.4f}, total {mode} loss: {total_loss:.4f}"
-            )
+            if mode == "train" or mode == "pretrain" or mode == "val":
+                # update train loss and multiply by
+                # data.size(0) to get the sum of the batch loss
+                total_loss += loss.item() * data.size(0)
+                pbar.set_description(
+                    f"{mode}, Epoch {step + 1}/{self.epochs}, Total Loss: {total_loss:.4f} F1: {batch_f1:.4f}"
+                )
+
+            elif mode == "test":
+                pbar.set_description(
+                    f"{mode}, Epoch {step + 1}/{self.epochs}, F1: {batch_f1:.4f}"
+                )
 
         loss /= len(dataloader)
         avg_f1 = sum(f1) / len(f1)
 
-        return loss, avg_f1
+        if mode == "train" or mode == "pretrain" or mode == "val":
+            return loss, avg_f1
+        elif mode == "test":
+            return f1, avg_f1
