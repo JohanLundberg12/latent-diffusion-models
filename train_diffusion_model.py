@@ -23,7 +23,8 @@ torch.backends.cudnn.benchmark = True
 
 def main(config: dict):
 
-    (train_loader, val_loader, classes) = create_dataloaders(config)
+    # returns test_loader but is not needed, we test on it later
+    (train_loader, val_loader, test_loader, classes) = create_dataloaders(config)
 
     # Load model
     model = get_model_from_config(config["model"])
