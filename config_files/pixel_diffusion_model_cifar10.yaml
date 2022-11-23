@@ -30,4 +30,4 @@ data:
   dataset: CIFAR10
   image_channels: 3
   image_size: 32 #for image rescaling
-  val_split: 0
+  val_split: 0.1
