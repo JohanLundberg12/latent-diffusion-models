@@ -18,7 +18,7 @@ from src.utils import get_model_from_config
 # but can lead to a significant speed up for conv layers.
 torch.backends.cudnn.benchmark = True
 
-os.environ["WANDB_MODE"] = "dryrun"
+# os.environ["WANDB_MODE"] = "dryrun"
 
 
 def main(config: dict):
