@@ -15,7 +15,7 @@ model:
     n_channels: [64, 128, 256, 512] 
 data:
   dataset: MNIST
-  image_channels: 1
+  image_channels: 3
   image_size: 16
 synthetic_data:
   path: pixel/pixel_diffusion_model_img16/results
