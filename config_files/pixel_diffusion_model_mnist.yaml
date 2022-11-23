@@ -1,5 +1,5 @@
 # Train or sample from a pixel based diffusion model
-name: pixel_diffusion_model_mnist_img32
+project_name: pixel_diffusion_model_mnist_img32
 entity: itu-gen
 type: pixel
 debugging: False
