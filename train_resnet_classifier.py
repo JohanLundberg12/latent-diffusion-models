@@ -63,7 +63,7 @@ def main(config: dict):
     trainer.train()
 
     f1_scores, avg_f1 = trainer.run(
-        mode="test", data_loader=test_loader, step="test step"
+        mode="test", dataloader=test_loader, step="test step"
     )
 
     wandb.log({"avg_test_f1": avg_f1})

@@ -1,7 +1,6 @@
 """Script to train a pixel or latent diffusion model
 """
 import sys
-import os
 
 import torch
 import yaml
