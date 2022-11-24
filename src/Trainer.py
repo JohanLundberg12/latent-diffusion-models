@@ -79,11 +79,10 @@ class Trainer:
     def train(self):
         raise NotImplementedError
 
-    # wandb logging of metrics
-    def _log_metrics(self, metrics: dict, step: int, mode: str):
+    def _log_metrics(self, metrics: dict, step: int):
         """Logs metrics to wandb"""
         for key, value in metrics.items():
-            wandb.log({f"{mode}/{key}": value}, step=step)
+            wandb.log({f"{key}": value}, step=step)
 
     # wandb logging of images using a list comprehension
     def _log_images(self, images: list, step: int, mode: str):

@@ -12,7 +12,7 @@ class ResNetTrainer(Trainer):
         self.model.to(self.device)
 
     @timeit
-    def train(self):
+    def train(self, exp_name=None):
         """
         ### Training loop
         """
@@ -24,13 +24,15 @@ class ResNetTrainer(Trainer):
         }
 
         for epoch in range(self.epochs):
-            results = self.run(mode="train", dataloader=self.train_loader, step=epoch)
-            train_loss = round(results[0], 4)
-            train_f1 = round(results[1], 4)
+            result = self.run(
+                mode="train", dataloader=self.train_loader, step=epoch + 1
+            )
+            train_loss = round(result[0].item(), 4)
+            train_f1 = round(result[1].item(), 4)
 
-            results = self.run(mode="valid", dataloader=self.val_loader, step=epoch)
-            valid_f1 = round(results[1], 4)
-            valid_loss = round(results[0], 4)
+            result = self.run(mode="valid", dataloader=self.val_loader, step=epoch + 1)
+            valid_f1 = round(result[1].item(), 4)
+            valid_loss = round(result[0].item(), 4)
 
             print(
                 f"\nEpoch {epoch + 1}/{self.epochs}",
@@ -46,7 +48,20 @@ class ResNetTrainer(Trainer):
             results["train_f1"].append(train_f1)
             results["valid_f1"].append(valid_f1)
 
-            self._log_metrics(metrics={**results}, step=epoch, mode="train")
+            self._log_metrics(
+                metrics={
+                    f"{exp_name} train_loss": train_loss,
+                    f"{exp_name} train_f1": train_f1,
+                },
+                step=epoch,
+            )
+            self._log_metrics(
+                metrics={
+                    f"{exp_name} valid_loss": valid_loss,
+                    f"{exp_name} valid_f1": valid_f1,
+                },
+                step=epoch,
+            )
 
             self.early_stopping(val_loss=valid_loss, model=self.model)
             if self.early_stopping.early_stop:
@@ -69,11 +84,11 @@ class ResNetTrainer(Trainer):
         print("Training done.")
 
     @timeit
-    def run(self, mode, dataloader, step, metrics=None):
+    def run(self, mode, dataloader, step):
         if mode == "train" or mode == "pretrain":
             self.model.train()
 
-        elif mode == "val" or mode == "test":
+        elif mode == "valid" or mode == "test":
             self.model.eval()
 
         else:
@@ -82,7 +97,7 @@ class ResNetTrainer(Trainer):
         total_loss = 0.0
         f1 = list()
 
-        pbar = progress_bar(dataloader, desc=f"{mode}, Epoch {step + 1}/{self.epochs}")
+        pbar = progress_bar(dataloader, desc=f"{mode}, Epoch {str(step)}/{self.epochs}")
 
         for _, (data, targets) in pbar:
             data, targets = data.to(self.device), targets.to(self.device)
@@ -109,7 +124,7 @@ class ResNetTrainer(Trainer):
                     loss.backward()
                     self.optimizer.step()
 
-            elif mode == "val":
+            elif mode == "valid":
                 # The scaler is not necessary during evaluation,
                 # as you won’t call backward in this step and
                 # thus there are not gradients to scale.
@@ -132,23 +147,23 @@ class ResNetTrainer(Trainer):
             )
             f1.append(batch_f1)
 
-            if mode == "train" or mode == "pretrain" or mode == "val":
+            if mode == "train" or mode == "pretrain" or mode == "valid":
                 # update train loss and multiply by
                 # data.size(0) to get the sum of the batch loss
                 total_loss += loss.item() * data.size(0)
                 pbar.set_description(
-                    f"{mode}, Epoch {step + 1}/{self.epochs}, Total Loss: {total_loss:.4f} F1: {batch_f1:.4f}"
+                    f"{mode}, Epoch {step}/{self.epochs}, Total Loss: {total_loss:.4f} F1: {batch_f1:.4f}"
                 )
 
             elif mode == "test":
                 pbar.set_description(
-                    f"{mode}, Epoch {step + 1}/{self.epochs}, F1: {batch_f1:.4f}"
+                    f"{mode}, Epoch {step}/{self.epochs}, F1: {batch_f1:.4f}"
                 )
 
-        loss /= len(dataloader)
+        total_loss /= len(dataloader)
         avg_f1 = sum(f1) / len(f1)
 
-        if mode == "train" or mode == "pretrain" or mode == "val":
+        if mode == "train" or mode == "pretrain" or mode == "valid":
             return loss, avg_f1
         elif mode == "test":
             return f1, avg_f1

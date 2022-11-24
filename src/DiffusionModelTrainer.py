@@ -130,9 +130,12 @@ class DiffusionModelTrainer(Trainer):
 
             # Log results to wandb
             self._log_metrics(
-                metrics={"train_loss": train_loss}, step=epoch, mode="train"
+                metrics={"diffusion_model train_loss": train_loss},
+                step=epoch,
             )
-            self._log_metrics(metrics={"val_loss": val_loss}, step=epoch, mode="val")
+            self._log_metrics(
+                metrics={"diffusion_model val_loss": val_loss}, step=epoch
+            )
 
             if epoch % 2 == 0:
                 images = self.sample(self.classes, cfg_scale=self.cfg_scale)
