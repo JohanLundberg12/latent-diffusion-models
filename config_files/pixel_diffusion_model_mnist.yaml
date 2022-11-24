@@ -1,5 +1,5 @@
 # Train or sample from a pixel based diffusion model
-project_name: pixel_diffusion_model_mnist_img32
+project_name: combined_experiments_final
 entity: itu-gen
 type: pixel
 debugging: False
@@ -12,7 +12,7 @@ diffusion:
     n_samples: 100 #number of generated examples after training
     device: cuda
 batch_size: 64
-epochs: 100
+epochs: 100 # 100
 lr: 0.0005
 use_amp: True
 loss_fn: mse
