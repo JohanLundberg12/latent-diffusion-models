@@ -8,7 +8,7 @@ diffusion:
   target: src.DDPM.Diffusion
   cfg_scale: 3
   params:
-    n_steps: 1000 # T (100-400)
+    n_steps: 400 # T (100-400)
     n_samples: 100 #number of generated examples after training
     device: cuda
 batch_size: 64

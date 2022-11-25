@@ -23,10 +23,12 @@ from src.UNet import UNet
 from src.ResNetClassifier import ResNetBase
 from src.ResNetTrainer import ResNetTrainer
 from src.DiffusionModelTrainer import DiffusionModelTrainer
-from src.utils import get_device, create_folder, save_images
+from src.utils import get_device, create_folder, save_images, load_model
 from src.transforms import get_image_transform, get_gray_scale_image_transform
+from src.EarlyStopping import EarlyStopping
 
 # import os
+
 # os.environ["WANDB_MODE"] = "dryrun"
 
 
@@ -173,6 +175,11 @@ def main(config: dict):
             diffusion=diffusion_model,
             cfg_scale=config.diffusion["cfg_scale"],
         )
+        trainer.early_stopping = EarlyStopping(
+            patience=config["early_stopping_patience"],
+            verbose=True,
+            path=f"{config['checkpoints']}/diffusion_model.pt",
+        )
 
         wandb.watch(model, trainer.loss_fn, log="all", log_freq=10)
         wandb.define_metric("diffusion_model train_loss", summary="min")
@@ -211,6 +218,11 @@ def main(config: dict):
             train_loader=train_loader,
             val_loader=val_loader,
             classes=classes,
+        )
+        resnet_trainer.early_stopping = EarlyStopping(
+            patience=config["early_stopping_patience"],
+            verbose=True,
+            path=f"{config['checkpoints']}/resnet_model exp1.pt",
         )
         # overwrite default loss function
         resnet_trainer.loss_fn = f.cross_entropy
@@ -254,6 +266,22 @@ def main(config: dict):
             num_workers=8,
             pin_memory=True,
         )
+
+        # load the model
+        resnet_model = load_model(
+            resnet_model,
+            f"{config['checkpoints']}/resnet_model exp1.pt",
+        )
+        resnet_trainer = ResNetTrainer(
+            config=config,
+            model=resnet_model,
+            train_loader=train_loader,
+            val_loader=val_loader,
+            classes=classes,
+        )
+
+        # evaluate the model on the test set
+
         f1_scores, avg_f1 = resnet_trainer.run(
             mode="test", dataloader=testloader, step="test step"
         )
@@ -272,7 +300,13 @@ def main(config: dict):
             config["data"]["image_size"],
         )
 
-        folder = f"{config['diffusion']['type']}/{config['project_name']}/results"
+        folder = f"{config['results']}"
+
+        # load diffusion model checkpoint
+        model = load_model(
+            model,
+            f"{config['checkpoints']}/diffusion_model.pt",
+        )
 
         for i in range(model.num_classes):
             class_name = str(i)
@@ -324,6 +358,11 @@ def main(config: dict):
             val_loader=val_loader,
             classes=classes,
         )
+        resnet_trainer.early_stopping = EarlyStopping(
+            patience=config["early_stopping_patience"],
+            verbose=True,
+            path=f"{config['checkpoints']}/resnet_model exp2.pt",
+        )
         # overwrite default loss function
         resnet_trainer.loss_fn = f.cross_entropy
 
@@ -339,6 +378,19 @@ def main(config: dict):
         ##############################################################################
         # evaluate the ResNet model on the test set
         ##############################################################################
+        # load the model
+        resnet_model = load_model(
+            resnet_model,
+            f"{config['checkpoints']}/resnet_model exp2.pt",
+        )
+        resnet_trainer = ResNetTrainer(
+            config=config,
+            model=resnet_model,
+            train_loader=generated_images_loader,
+            val_loader=val_loader,
+            classes=classes,
+        )
+
         f1_scores, avg_f1 = resnet_trainer.run(
             mode="test", dataloader=testloader, step="test step"
         )
@@ -383,6 +435,11 @@ def main(config: dict):
             val_loader=val_loader,
             classes=classes,
         )
+        resnet_trainer.early_stopping = EarlyStopping(
+            patience=config["early_stopping_patience"],
+            verbose=True,
+            path=f"{config['checkpoints']}/resnet_model exp3.pt",
+        )
         # overwrite default loss function
         resnet_trainer.loss_fn = f.cross_entropy
 
@@ -398,6 +455,19 @@ def main(config: dict):
         ##############################################################################
         # evaluate the ResNet model on the test set
         ##############################################################################
+        # load the model
+        resnet_model = load_model(
+            resnet_model,
+            f"{config['checkpoints']}/resnet_model exp3.pt",
+        )
+        resnet_trainer = ResNetTrainer(
+            config=config,
+            model=resnet_model,
+            train_loader=trainset3_loader,
+            val_loader=val_loader,
+            classes=classes,
+        )
+
         f1_scores, avg_f1 = resnet_trainer.run(
             mode="test", dataloader=testloader, step="test step"
         )
@@ -449,6 +519,12 @@ def main(config: dict):
             val_loader=val_loader,
             classes=classes,
         )
+        resnet_trainer.early_stopping = EarlyStopping(
+            patience=config["early_stopping_patience"],
+            verbose=True,
+            path=f"{config['checkpoints']}/resnet_model exp4.pt",
+        )
+
         # overwrite default loss function
         resnet_trainer.loss_fn = f.cross_entropy
 
@@ -464,6 +540,19 @@ def main(config: dict):
         ##############################################################################
         # evaluate the ResNet model on the test set
         ##############################################################################
+        # load the model
+        resnet_model = load_model(
+            resnet_model,
+            f"{config['checkpoints']}/resnet_model exp4.pt",
+        )
+        resnet_trainer = ResNetTrainer(
+            config=config,
+            model=resnet_model,
+            train_loader=trainset4_loader,
+            val_loader=val_loader,
+            classes=classes,
+        )
+
         f1_scores, avg_f1 = resnet_trainer.run(
             mode="test", dataloader=testloader, step="test step"
         )
@@ -515,6 +604,11 @@ def main(config: dict):
             val_loader=val_loader,
             classes=classes,
         )
+        resnet_trainer.early_stopping = EarlyStopping(
+            patience=config["early_stopping_patience"],
+            verbose=True,
+            path=f"{config['checkpoints']}/resnet_model exp5.pt",
+        )
         # overwrite default loss function
         resnet_trainer.loss_fn = f.cross_entropy
 
@@ -530,6 +624,18 @@ def main(config: dict):
         ##############################################################################
         # evaluate the ResNet model on the test set
         ##############################################################################
+        # load the model
+        resnet_model = load_model(
+            resnet_model,
+            f"{config['checkpoints']}/resnet_model exp5.pt",
+        )
+        resnet_trainer = ResNetTrainer(
+            config=config,
+            model=resnet_model,
+            train_loader=trainset5_loader,
+            val_loader=val_loader,
+            classes=classes,
+        )
 
         f1_scores, avg_f1 = resnet_trainer.run(
             mode="test", dataloader=testloader, step="test step"
