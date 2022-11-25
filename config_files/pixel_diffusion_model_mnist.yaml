@@ -1,8 +1,8 @@
 # Train or sample from a pixel based diffusion model
-project_name: combined_experiments_final
+project_name: combined_experiments_final_mnist
 entity: itu-gen
 type: pixel
-debugging: True
+debugging: False
 diffusion:
   type: pixel
   target: src.DDPM.Diffusion
