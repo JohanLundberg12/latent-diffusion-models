@@ -12,19 +12,19 @@ import torch
 import yaml
 
 from src.utils import create_folder, get_model_from_config
-from src import get_device, save_images
+from src.utils import get_device, save_images
 
 
 def main(model, diffusion_model, config, device):
     # Set the shape of the images to be generated
     shape = (
-        config["batch_size"],
+        1,
         config["data"]["image_channels"],
         config["data"]["image_size"],
         config["data"]["image_size"],
     )
 
-    folder = f"{config['diffusion']['type']}/{config['name']}/results"
+    folder = f"{config['diffusion']['type']}/{config['project_name']}/results"
 
     for i in range(model.num_classes):
         class_name = str(i)
@@ -43,7 +43,7 @@ def main(model, diffusion_model, config, device):
 
 # checkpoint is in the folder pixel/name/checkpoints
 def get_state_dict_path_from_config(config):
-    return f"{config['diffusion']['type']}/{config['name']}/checkpoints/checkpoint.pt"
+    return f"{config['diffusion']['type']}/{config['project_name']}/checkpoints/checkpoint.pt"
 
 
 if __name__ == "__main__":
