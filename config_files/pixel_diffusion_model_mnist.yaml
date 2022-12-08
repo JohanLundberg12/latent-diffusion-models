@@ -1,5 +1,5 @@
 # Train or sample from a pixel based diffusion model
-project_name: combined_experiments_final_mnist
+project_name: pixel_diffusion_model_mnist_img32
 entity: itu-gen
 type: pixel
 debugging: False
@@ -27,7 +27,7 @@ model:
     with_time_emb: True
     num_classes: 10
 data:
-  dataset: MNIST
+  dataset: MNIS
   image_channels: 1
   image_size: 32 #for image rescaling
   val_split: 0.1
