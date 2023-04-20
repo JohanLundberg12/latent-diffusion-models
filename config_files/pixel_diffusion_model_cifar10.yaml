@@ -1,5 +1,5 @@
 # Train or sample from a pixel based diffusion model
-project_name: "pixel_diffusion_model_CIFAR10_img32"
+project_name: pixel_diffusion_model_CIFAR10_img32
 entity: itu-gen
 type: pixel
 debugging: False
