@@ -5,17 +5,12 @@ improve an image classifier.
 
 # Usage
 
-To train the diffusion model run 
+To rerun my experiments run:
 ```bash
-$ python train_diffusion_model.py config_files/config_file.yaml
+$ python main.py config_files/pixel_diffusion_model_mnist.yaml
+```
+and
+```bash
+$ python main.py config_files/pixel_diffusion_model_cifar10.yaml
 ```
 
-To generate more data using the trained diffusion model run 
-```bash
-$ python generate_images.py config_files/config_file.yaml
-```
-
-To train the resnet classifier run 
-```bash
-$ python train_resnet_classifier.py config_files/config_file.yaml
-```
