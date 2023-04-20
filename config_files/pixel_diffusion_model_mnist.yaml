@@ -27,7 +27,7 @@ model:
     with_time_emb: True
     num_classes: 10
 data:
-  dataset: MNIS
+  dataset: MNIST
   image_channels: 1
   image_size: 32 #for image rescaling
   val_split: 0.1
