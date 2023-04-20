@@ -27,9 +27,9 @@ from src.utils import get_device, create_folder, save_images, load_model
 from src.transforms import get_image_transform, get_gray_scale_image_transform
 from src.EarlyStopping import EarlyStopping
 
-# import os
+import os
 
-# os.environ["WANDB_MODE"] = "dryrun"
+os.environ["WANDB_MODE"] = "dryrun"
 
 
 def num_to_groups(num, group_size):
